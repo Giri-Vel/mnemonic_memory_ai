@@ -1,0 +1,44 @@
+[
+  {
+    "id": 0,
+    "content": "I am working on a personal AI memory system",
+    "timestamp": "2025-10-14T23:41:27.188512",
+    "metadata": {}
+  },
+  {
+    "id": 1,
+    "content": "My goal is to get a 250k USD remote job",
+    "timestamp": "2025-10-14T23:41:27.188761",
+    "metadata": {}
+  },
+  {
+    "id": 2,
+    "content": "I am getting married in June 2025",
+    "timestamp": "2025-10-14T23:41:27.188843",
+    "metadata": {}
+  },
+  {
+    "id": 3,
+    "content": "I am working on a personal AI memory system",
+    "timestamp": "2025-10-14T23:43:07.134774",
+    "metadata": {}
+  },
+  {
+    "id": 4,
+    "content": "My goal is to get a 250k USD remote job",
+    "timestamp": "2025-10-14T23:43:07.134892",
+    "metadata": {}
+  },
+  {
+    "id": 5,
+    "content": "I am getting married in June 2025",
+    "timestamp": "2025-10-14T23:43:07.134951",
+    "metadata": {}
+  },
+  {
+    "id": 6,
+    "content": "Testing my first real memory",
+    "timestamp": "2025-10-14T23:45:07.735243",
+    "metadata": {}
+  }
+]

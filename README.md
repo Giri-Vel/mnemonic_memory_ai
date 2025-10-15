@@ -23,5 +23,22 @@ A local-first, personal AI context engine that:
 - SQLite (graph relationships)
 - [More as I build]
 
+## Mnemonic.cli Usage
+- Store a memory - python -m mnemonic.cli store "Your memory here"
+- Search memories - python -m mnemonic.cli search "keyword"
+- List recent memories - python -m mnemonic.cli list
+- View statistics - python -m mnemonic.cli stats
+
 ---
-*Day 1 commit: [date]*
+## Progress
+
+### ✅ Day 1 (Oct 15)
+- Repository setup
+- Project structure
+- Initial README
+
+### ✅ Day 2 (Oct 16)
+- Core memory system implemented
+- JSON persistence working
+- Basic search functionality
+- Test suite passing

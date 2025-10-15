@@ -40,5 +40,23 @@
     "content": "Testing my first real memory",
     "timestamp": "2025-10-14T23:45:07.735243",
     "metadata": {}
+  },
+  {
+    "id": 7,
+    "content": "Testing the CLI interface",
+    "timestamp": "2025-10-15T23:57:56.233167",
+    "metadata": {}
+  },
+  {
+    "id": 8,
+    "content": "This is going to change my life",
+    "timestamp": "2025-10-15T23:58:06.221437",
+    "metadata": {}
+  },
+  {
+    "id": 9,
+    "content": "Building in public is scary but necessary",
+    "timestamp": "2025-10-15T23:58:14.112002",
+    "metadata": {}
   }
 ]

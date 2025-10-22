@@ -1,76 +1,272 @@
 """
-Mnemonic CLI - Command line interface for memory operations
+Command-line interface for Mnemonic memory system.
+Enhanced with semantic search capabilities.
 """
+import click
+import logging
+from typing import Optional
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich import box
 
-import argparse
-from mnemonic.core.memory import SimpleMemory
+from mnemonic.memory_system import MemorySystem
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Mnemonic - Your Personal AI Memory System"
-    )
-    parser.add_argument(
-        'command', 
-        choices=['store', 'search', 'list', 'stats'],
-        help='Command to execute'
-    )
-    parser.add_argument(
-        'content', 
-        nargs='*', 
-        help='Content to store or search query'
-    )
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Rich console for pretty output
+console = Console()
+
+
+@click.group()
+@click.version_option(version="0.1.0")
+def cli():
+    """
+    Mnemonic - Personal AI Memory System
     
-    args = parser.parse_args()
-    mem = SimpleMemory()
-    
-    if args.command == 'store':
-        if not args.content:
-            print("❌ Error: No content provided to store")
-            return
-        content = ' '.join(args.content)
-        mem_id = mem.store(content)
-        print(f"✅ Stored memory #{mem_id}")
-        print(f"   '{content[:60]}{'...' if len(content) > 60 else ''}'")
-    
-    elif args.command == 'search':
-        if not args.content:
-            print("❌ Error: No search query provided")
-            return
-        query = ' '.join(args.content)
-        results = mem.search(query)
+    A local-first memory system that learns and remembers.
+    """
+    pass
+
+
+@cli.command()
+@click.argument("content")
+@click.option("--tags", "-t", multiple=True, help="Tags for categorization")
+def store(content: str, tags: tuple):
+    """Store a new memory."""
+    try:
+        memory_system = MemorySystem()
+        memory = memory_system.add(
+            content=content,
+            tags=list(tags) if tags else None
+        )
         
-        if not results:
-            print(f"🔍 No memories found for '{query}'")
-        else:
-            print(f"🔍 Found {len(results)} memories for '{query}':\n")
-            for r in results:
-                print(f"  [{r['id']}] {r['content']}")
-                print(f"      📅 {r['timestamp']}\n")
-    
-    elif args.command == 'list':
-        memories = mem.retrieve_all()
-        if not memories:
-            print("📝 No memories stored yet")
-        else:
-            print(f"📝 Total memories: {len(memories)}\n")
-            # Show last 10
-            for m in memories[-10:]:
-                print(f"  [{m['id']}] {m['content'][:70]}{'...' if len(m['content']) > 70 else ''}")
-                print(f"      📅 {m['timestamp']}\n")
+        console.print(f"[green]✓[/green] Memory stored: {memory.id[:8]}...")
+        if tags:
+            console.print(f"  Tags: {', '.join(tags)}")
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error storing memory: {e}", style="red")
+        logger.error(f"Error in store command: {e}", exc_info=True)
+
+
+@cli.command()
+@click.argument("query")
+@click.option("--limit", "-n", default=5, help="Number of results to return")
+@click.option("--tags", "-t", multiple=True, help="Filter by tags")
+@click.option("--mode", "-m", type=click.Choice(["semantic", "keyword"]), default="semantic", help="Search mode")
+def search(query: str, limit: int, tags: tuple, mode: str):
+    """Search memories using semantic or keyword search."""
+    try:
+        memory_system = MemorySystem()
+        
+        if mode == "semantic":
+            results = memory_system.semantic_search(
+                query=query,
+                n_results=limit,
+                tags=list(tags) if tags else None
+            )
             
-            if len(memories) > 10:
-                print(f"  ... and {len(memories) - 10} more")
-    
-    elif args.command == 'stats':
-        memories = mem.retrieve_all()
-        print(f"📊 Memory Statistics:\n")
-        print(f"  Total memories: {len(memories)}")
-        if memories:
-            total_chars = sum(len(m['content']) for m in memories)
-            avg_length = total_chars / len(memories)
-            print(f"  Average length: {avg_length:.0f} characters")
-            print(f"  First memory: {memories[0]['timestamp']}")
-            print(f"  Latest memory: {memories[-1]['timestamp']}")
+            if not results:
+                console.print(f"[yellow]No memories found for: {query}[/yellow]")
+                return
+            
+            # Display results in a table
+            table = Table(
+                title=f"Semantic Search Results for: {query}",
+                box=box.ROUNDED,
+                show_header=True,
+                header_style="bold cyan"
+            )
+            table.add_column("Relevance", style="green", width=10)
+            table.add_column("Content", style="white", width=60)
+            table.add_column("Tags", style="magenta", width=20)
+            
+            for result in results:
+                memory = result["memory"]
+                score = result.get("relevance_score", 0)
+                score_pct = f"{score * 100:.1f}%" if score else "N/A"
+                
+                content_preview = memory["content"][:100] + "..." if len(memory["content"]) > 100 else memory["content"]
+                tags_str = ", ".join(memory.get("tags", []))
+                
+                table.add_row(score_pct, content_preview, tags_str)
+            
+            console.print(table)
+            
+        else:  # keyword mode
+            results = memory_system.keyword_search(query)
+            
+            if not results:
+                console.print(f"[yellow]No memories found for: {query}[/yellow]")
+                return
+            
+            table = Table(
+                title=f"Keyword Search Results for: {query}",
+                box=box.ROUNDED,
+                show_header=True,
+                header_style="bold cyan"
+            )
+            table.add_column("ID", style="dim", width=12)
+            table.add_column("Content", style="white", width=60)
+            table.add_column("Tags", style="magenta", width=20)
+            
+            for memory in results[:limit]:
+                mem_dict = memory.to_dict()
+                content_preview = mem_dict["content"][:100] + "..." if len(mem_dict["content"]) > 100 else mem_dict["content"]
+                tags_str = ", ".join(mem_dict.get("tags", []))
+                
+                table.add_row(mem_dict["id"][:12], content_preview, tags_str)
+            
+            console.print(table)
+            
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error searching memories: {e}", style="red")
+        logger.error(f"Error in search command: {e}", exc_info=True)
+
+
+@cli.command()
+@click.option("--limit", "-n", default=10, help="Number of memories to show")
+def list(limit: int):
+    """List recent memories."""
+    try:
+        memory_system = MemorySystem()
+        memories = memory_system.list_recent(n=limit)
+        
+        if not memories:
+            console.print("[yellow]No memories stored yet[/yellow]")
+            return
+        
+        table = Table(
+            title=f"Recent Memories (Last {len(memories)})",
+            box=box.ROUNDED,
+            show_header=True,
+            header_style="bold cyan"
+        )
+        table.add_column("ID", style="dim", width=12)
+        table.add_column("Content", style="white", width=60)
+        table.add_column("Tags", style="magenta", width=20)
+        table.add_column("Date", style="dim", width=12)
+        
+        for memory in memories:
+            mem_dict = memory.to_dict()
+            content_preview = mem_dict["content"][:100] + "..." if len(mem_dict["content"]) > 100 else mem_dict["content"]
+            tags_str = ", ".join(mem_dict.get("tags", []))
+            date = mem_dict["timestamp"][:10]  # Just the date part
+            
+            table.add_row(mem_dict["id"][:12], content_preview, tags_str, date)
+        
+        console.print(table)
+        
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error listing memories: {e}", style="red")
+        logger.error(f"Error in list command: {e}", exc_info=True)
+
+
+@cli.command()
+def stats():
+    """Show memory system statistics."""
+    try:
+        memory_system = MemorySystem()
+        stats = memory_system.get_stats()
+        
+        # Create a styled panel
+        stats_text = f"""
+[cyan]Total Memories:[/cyan] {stats['total_memories']}
+[cyan]Unique Tags:[/cyan] {stats['unique_tags']}
+[cyan]JSON Storage:[/cyan] {stats['json_path']}
+[cyan]Vector Store:[/cyan] {stats['vector_store']['persist_directory']}
+[cyan]Vector Collection:[/cyan] {stats['vector_store']['collection_name']}
+        """
+        
+        panel = Panel(
+            stats_text.strip(),
+            title="📊 Mnemonic Statistics",
+            border_style="cyan",
+            box=box.DOUBLE
+        )
+        
+        console.print(panel)
+        
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error getting stats: {e}", style="red")
+        logger.error(f"Error in stats command: {e}", exc_info=True)
+
+
+@cli.command()
+@click.argument("memory_id")
+def get(memory_id: str):
+    """Get a specific memory by ID."""
+    try:
+        memory_system = MemorySystem()
+        memory = memory_system.get(memory_id)
+        
+        if not memory:
+            console.print(f"[red]✗[/red] Memory not found: {memory_id}", style="red")
+            return
+        
+        mem_dict = memory.to_dict()
+        
+        # Display in a styled panel
+        content = f"""
+[cyan]ID:[/cyan] {mem_dict['id']}
+[cyan]Content:[/cyan] {mem_dict['content']}
+[cyan]Tags:[/cyan] {', '.join(mem_dict.get('tags', [])) or 'None'}
+[cyan]Created:[/cyan] {mem_dict['timestamp']}
+        """
+        
+        if "updated_at" in mem_dict["metadata"]:
+            content += f"\n[cyan]Updated:[/cyan] {mem_dict['metadata']['updated_at']}"
+        
+        panel = Panel(
+            content.strip(),
+            title="📝 Memory Details",
+            border_style="cyan",
+            box=box.ROUNDED
+        )
+        
+        console.print(panel)
+        
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error getting memory: {e}", style="red")
+        logger.error(f"Error in get command: {e}", exc_info=True)
+
+
+@cli.command()
+@click.argument("memory_id")
+@click.confirmation_option(prompt="Are you sure you want to delete this memory?")
+def delete(memory_id: str):
+    """Delete a memory by ID."""
+    try:
+        memory_system = MemorySystem()
+        success = memory_system.delete(memory_id)
+        
+        if success:
+            console.print(f"[green]✓[/green] Memory deleted: {memory_id}")
+        else:
+            console.print(f"[red]✗[/red] Memory not found: {memory_id}", style="red")
+            
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error deleting memory: {e}", style="red")
+        logger.error(f"Error in delete command: {e}", exc_info=True)
+
+
+@cli.command()
+@click.confirmation_option(prompt="Are you sure you want to reset all memories?")
+def reset():
+    """Reset the entire memory system (delete all data)."""
+    try:
+        memory_system = MemorySystem()
+        memory_system.reset()
+        console.print("[green]✓[/green] Memory system reset successfully")
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error resetting memory system: {e}", style="red")
+        logger.error(f"Error in reset command: {e}", exc_info=True)
+
 
 if __name__ == "__main__":
-    main()
+    cli()

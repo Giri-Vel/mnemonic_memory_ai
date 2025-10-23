@@ -25,5 +25,85 @@
       "timestamp": "2025-10-22T11:31:03.689332"
     },
     "timestamp": "2025-10-22T11:31:03.689332"
+  },
+  "287d1c52-c594-4ec0-ae21-3004072bd07b": {
+    "id": "287d1c52-c594-4ec0-ae21-3004072bd07b",
+    "content": "I completed ChromaDB integration today -t milestone -t week1\n",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-10-22T15:45:14.802832"
+    },
+    "timestamp": "2025-10-22T15:45:14.802832"
+  },
+  "426ed468-a5c9-4f1f-b543-eaf28439ee1a": {
+    "id": "426ed468-a5c9-4f1f-b543-eaf28439ee1a",
+    "content": "test content",
+    "tags": [
+      "tag1",
+      "tag2"
+    ],
+    "metadata": {
+      "timestamp": "2025-10-23T23:59:05.549827"
+    },
+    "timestamp": "2025-10-23T23:59:05.549827"
+  },
+  "d31646d3-c495-444f-814f-484e7b487bf1": {
+    "id": "d31646d3-c495-444f-814f-484e7b487bf1",
+    "content": "test",
+    "tags": [
+      "tag1"
+    ],
+    "metadata": {
+      "timestamp": "2025-10-24T00:16:20.333734"
+    },
+    "timestamp": "2025-10-24T00:16:20.333734"
+  },
+  "0d0b4bc3-5d0e-4c72-bcee-7358b909c79d": {
+    "id": "0d0b4bc3-5d0e-4c72-bcee-7358b909c79d",
+    "content": "Python is great for machine learning",
+    "tags": [
+      "programming",
+      "python"
+    ],
+    "metadata": {
+      "timestamp": "2025-10-24T00:22:30.149288"
+    },
+    "timestamp": "2025-10-24T00:22:30.149288"
+  },
+  "4a56c651-b563-4db4-b2e7-0821e58239f0": {
+    "id": "4a56c651-b563-4db4-b2e7-0821e58239f0",
+    "content": "I love hiking in the mountains",
+    "tags": [
+      "hobby",
+      "outdoors"
+    ],
+    "metadata": {
+      "timestamp": "2025-10-24T00:22:40.621047"
+    },
+    "timestamp": "2025-10-24T00:22:40.621047"
+  },
+  "a94bce34-396b-46c5-a5fe-352113c0d8a2": {
+    "id": "a94bce34-396b-46c5-a5fe-352113c0d8a2",
+    "content": "Neural networks are fascinating",
+    "tags": [
+      "ai",
+      "learning"
+    ],
+    "metadata": {
+      "timestamp": "2025-10-24T00:22:48.474439"
+    },
+    "timestamp": "2025-10-24T00:22:48.474439"
+  },
+  "ca7e8daf-1a5f-4f23-987b-3786efcd4827": {
+    "id": "ca7e8daf-1a5f-4f23-987b-3786efcd4827",
+    "content": "test content",
+    "tags": [
+      "tag1",
+      "tag2"
+    ],
+    "metadata": {
+      "timestamp": "2025-10-24T00:26:06.235258"
+    },
+    "timestamp": "2025-10-24T00:26:06.235258"
   }
 }

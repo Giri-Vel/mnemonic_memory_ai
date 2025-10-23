@@ -129,13 +129,19 @@ class MemorySystem:
         Returns:
             Created Memory object
         """
+        print("MEMORY_SYSTEM DEBUG 1: Start of add()")
+        print(f"MEMORY_SYSTEM DEBUG 2: content={content}, tags={tags}")
         memory = Memory(content=content, tags=tags, metadata=metadata)
+        print(f"MEMORY_SYSTEM DEBUG 3: Memory object created, id={memory.id}")
         
         # Add to JSON storage
         self.memories[memory.id] = memory
+        print("MEMORY_SYSTEM DEBUG 4: Added to self.memories dict")
         self._save_memories()
+        print("MEMORY_SYSTEM DEBUG 5: _save_memories() completed")
         
         # Add to vector store
+        print("MEMORY_SYSTEM DEBUG 6: About to call vector_store.add_memory()")
         self.vector_store.add_memory(
             memory_id=memory.id,
             content=content,
@@ -145,6 +151,7 @@ class MemorySystem:
                 **(metadata or {})
             }
         )
+        print("MEMORY_SYSTEM DEBUG 7: vector_store.add_memory() completed")
         
         logger.info(f"Added memory {memory.id}")
         return memory

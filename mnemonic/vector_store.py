@@ -59,12 +59,18 @@ class VectorStore:
             content: Text content to embed
             metadata: Additional metadata to store
         """
+        print(f"VECTOR DEBUG 1: add_memory called with memory_id={memory_id}")
+        print(f"VECTOR DEBUG 2: content={content}")
+        print(f"VECTOR DEBUG 3: metadata={metadata}")
 
         try:
             # Prepare metadata
             meta = metadata or {}
+            print(f"VECTOR DEBUG 4: meta before timestamp={meta}")
             meta["timestamp"] = meta.get("timestamp", datetime.now().isoformat())
+            print(f"VECTOR DEBUG 5: About to sanitize metadata")
             meta = self._sanitize_metadata(meta)
+            print(f"VECTOR DEBUG 6: After sanitize, meta={meta}")
             
             for key, value in meta.items():
                 if isinstance(value, list):

@@ -34,16 +34,38 @@ def cli():
     pass
 
 
+# @cli.command()
+# @click.argument("content")
+# @click.option("--tags", "-t", multiple=True, help="Tags for categorization")
+# def store(content: str, tags: tuple):
+#     """Store a new memory."""
+#     try:
+#         memory_system = MemorySystem()
+#         memory = memory_system.add(
+#             content=content,
+#             tags=list(tags) if tags else None
+#         )
+        
+#         console.print(f"[green]✓[/green] Memory stored: {memory.id[:8]}...")
+#         if tags:
+#             console.print(f"  Tags: {', '.join(tags)}")
+#     except Exception as e:
+#         console.print(f"[red]✗[/red] Error storing memory: {e}", style="red")
+#         logger.error(f"Error in store command: {e}", exc_info=True)
+
+
 @cli.command()
 @click.argument("content")
 @click.option("--tags", "-t", multiple=True, help="Tags for categorization")
 def store(content: str, tags: tuple):
     """Store a new memory."""
+    import builtins  # Import at function level
+    
     try:
         memory_system = MemorySystem()
         memory = memory_system.add(
             content=content,
-            tags=list(tags) if tags else None
+            tags=builtins.list(tags) if tags else None  # Use builtins.list!
         )
         
         console.print(f"[green]✓[/green] Memory stored: {memory.id[:8]}...")
@@ -129,9 +151,12 @@ def search(query: str, limit: int, tags: tuple, mode: str):
         logger.error(f"Error in search command: {e}", exc_info=True)
 
 
-@cli.command()
+# @cli.command()
+# @click.option("--limit", "-n", default=10, help="Number of memories to show")
+# def list(limit: int):
+@cli.command(name="recent")  # Change the command name
 @click.option("--limit", "-n", default=10, help="Number of memories to show")
-def list(limit: int):
+def list_memories(limit: int):  # Rename the function
     """List recent memories."""
     try:
         memory_system = MemorySystem()
@@ -268,5 +293,5 @@ def reset():
         logger.error(f"Error in reset command: {e}", exc_info=True)
 
 
-if __name__ == "__main__":
-    cli()
+# if __name__ == "__main__":
+#     cli()

@@ -1,109 +1,55 @@
 {
-  "6cffe9e4-4165-4668-ae66-ae56229cf87e": {
-    "id": "6cffe9e4-4165-4668-ae66-ae56229cf87e",
-    "content": "I completed ChromaDB integration today -t milestone -t week1",
+  "f5e7eafb-dec1-4134-9899-a524165ddcba": {
+    "id": "f5e7eafb-dec1-4134-9899-a524165ddcba",
+    "content": "",
     "tags": [],
     "metadata": {
-      "timestamp": "2025-10-22T11:09:16.208361"
+      "timestamp": "2025-10-26T11:38:01.176547"
     },
-    "timestamp": "2025-10-22T11:09:16.208361"
+    "timestamp": "2025-10-26T11:38:01.176547"
   },
-  "99eb7df4-4dd1-40af-9ca5-db3dec5b0bf0": {
-    "id": "99eb7df4-4dd1-40af-9ca5-db3dec5b0bf0",
-    "content": "I completed ChromaDB integration today -t milestone -t week1",
-    "tags": [],
-    "metadata": {
-      "timestamp": "2025-10-22T11:16:45.188099"
-    },
-    "timestamp": "2025-10-22T11:16:45.188099"
-  },
-  "d64dd422-4033-44c1-82f3-19b7f7cd6529": {
-    "id": "d64dd422-4033-44c1-82f3-19b7f7cd6529",
-    "content": "I completed ChromaDB integration today and also corrected some mistakes -t milestone -t week1",
-    "tags": [],
-    "metadata": {
-      "timestamp": "2025-10-22T11:31:03.689332"
-    },
-    "timestamp": "2025-10-22T11:31:03.689332"
-  },
-  "287d1c52-c594-4ec0-ae21-3004072bd07b": {
-    "id": "287d1c52-c594-4ec0-ae21-3004072bd07b",
-    "content": "I completed ChromaDB integration today -t milestone -t week1\n",
-    "tags": [],
-    "metadata": {
-      "timestamp": "2025-10-22T15:45:14.802832"
-    },
-    "timestamp": "2025-10-22T15:45:14.802832"
-  },
-  "426ed468-a5c9-4f1f-b543-eaf28439ee1a": {
-    "id": "426ed468-a5c9-4f1f-b543-eaf28439ee1a",
-    "content": "test content",
+  "defbf2c7-9ce4-41ff-9004-76e1153fb7a6": {
+    "id": "defbf2c7-9ce4-41ff-9004-76e1153fb7a6",
+    "content": "Integration test memory about machine learning",
     "tags": [
-      "tag1",
-      "tag2"
+      "test,ml,integration"
     ],
     "metadata": {
-      "timestamp": "2025-10-23T23:59:05.549827"
+      "timestamp": "2025-10-26T11:38:09.533878"
     },
-    "timestamp": "2025-10-23T23:59:05.549827"
+    "timestamp": "2025-10-26T11:38:09.533878"
   },
-  "d31646d3-c495-444f-814f-484e7b487bf1": {
-    "id": "d31646d3-c495-444f-814f-484e7b487bf1",
-    "content": "test",
+  "1120e202-fd30-46b8-a9e9-138f6553cee7": {
+    "id": "1120e202-fd30-46b8-a9e9-138f6553cee7",
+    "content": "Python programming tutorial",
     "tags": [
-      "tag1"
-    ],
-    "metadata": {
-      "timestamp": "2025-10-24T00:16:20.333734"
-    },
-    "timestamp": "2025-10-24T00:16:20.333734"
-  },
-  "0d0b4bc3-5d0e-4c72-bcee-7358b909c79d": {
-    "id": "0d0b4bc3-5d0e-4c72-bcee-7358b909c79d",
-    "content": "Python is great for machine learning",
-    "tags": [
-      "programming",
       "python"
     ],
     "metadata": {
-      "timestamp": "2025-10-24T00:22:30.149288"
+      "timestamp": "2025-10-26T11:38:20.200120"
     },
-    "timestamp": "2025-10-24T00:22:30.149288"
+    "timestamp": "2025-10-26T11:38:20.200120"
   },
-  "4a56c651-b563-4db4-b2e7-0821e58239f0": {
-    "id": "4a56c651-b563-4db4-b2e7-0821e58239f0",
-    "content": "I love hiking in the mountains",
+  "3ddabd3e-5a92-4342-ab28-13047b7bf5ad": {
+    "id": "3ddabd3e-5a92-4342-ab28-13047b7bf5ad",
+    "content": "Machine learning with Python",
     "tags": [
-      "hobby",
-      "outdoors"
+      "python"
     ],
     "metadata": {
-      "timestamp": "2025-10-24T00:22:40.621047"
+      "timestamp": "2025-10-26T11:38:23.374597"
     },
-    "timestamp": "2025-10-24T00:22:40.621047"
+    "timestamp": "2025-10-26T11:38:23.374597"
   },
-  "a94bce34-396b-46c5-a5fe-352113c0d8a2": {
-    "id": "a94bce34-396b-46c5-a5fe-352113c0d8a2",
-    "content": "Neural networks are fascinating",
+  "86d0b3c2-ee2c-4642-b089-fa16d2bbae31": {
+    "id": "86d0b3c2-ee2c-4642-b089-fa16d2bbae31",
+    "content": "Data science Python libraries",
     "tags": [
-      "ai",
-      "learning"
+      "python"
     ],
     "metadata": {
-      "timestamp": "2025-10-24T00:22:48.474439"
+      "timestamp": "2025-10-26T11:38:26.525754"
     },
-    "timestamp": "2025-10-24T00:22:48.474439"
-  },
-  "ca7e8daf-1a5f-4f23-987b-3786efcd4827": {
-    "id": "ca7e8daf-1a5f-4f23-987b-3786efcd4827",
-    "content": "test content",
-    "tags": [
-      "tag1",
-      "tag2"
-    ],
-    "metadata": {
-      "timestamp": "2025-10-24T00:26:06.235258"
-    },
-    "timestamp": "2025-10-24T00:26:06.235258"
+    "timestamp": "2025-10-26T11:38:26.525754"
   }
 }

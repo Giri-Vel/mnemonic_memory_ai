@@ -80,72 +80,58 @@ def store(content: str, tags: tuple):
 @click.argument("query")
 @click.option("--limit", "-n", default=5, help="Number of results to return")
 @click.option("--tags", "-t", multiple=True, help="Filter by tags")
-@click.option("--mode", "-m", type=click.Choice(["semantic", "keyword"]), default="semantic", help="Search mode")
-def search(query: str, limit: int, tags: tuple, mode: str):
-    """Search memories using semantic or keyword search."""
+def search(query: str, limit: int, tags: tuple):
+    """Search memories using intelligent hybrid search (85% semantic + 15% keyword)."""
     try:
         memory_system = MemorySystem()
         
-        if mode == "semantic":
-            results = memory_system.semantic_search(
-                query=query,
-                n_results=limit,
-                tags=list(tags) if tags else None
-            )
+        # Use hybrid search
+        results = memory_system.hybrid_search(
+            query=query,
+            n_results=limit,
+            tags=list(tags) if tags else None
+        )
+        
+        # Check for empty results FIRST
+        if not results:
+            console.print(f"[yellow]No memories found for: '{query}'[/yellow]")
+            return
+        
+        # Display results in a table
+        table = Table(
+            title=f"🔍 Search Results for: '{query}'",
+            box=box.ROUNDED,
+            show_header=True,
+            header_style="bold cyan"
+        )
+        table.add_column("Score", style="green", width=8)
+        table.add_column("Content", style="white", width=60)
+        table.add_column("Tags", style="magenta", width=20)
+        table.add_column("Match", style="dim", width=15)
+        
+        for result in results:
+            memory = result["memory"]
+            hybrid_score = result.get("hybrid_score", 0)
+            score_pct = f"{hybrid_score * 100:.0f}%"
             
-            if not results:
-                console.print(f"[yellow]No memories found for: {query}[/yellow]")
-                return
+            # Determine match type
+            sources = result.get("sources", [])
             
-            # Display results in a table
-            table = Table(
-                title=f"Semantic Search Results for: {query}",
-                box=box.ROUNDED,
-                show_header=True,
-                header_style="bold cyan"
-            )
-            table.add_column("Relevance", style="green", width=10)
-            table.add_column("Content", style="white", width=60)
-            table.add_column("Tags", style="magenta", width=20)
+            if len(sources) == 2:
+                match_type = "Both"
+            elif "semantic" in sources:
+                match_type = "Concept"
+            else:
+                match_type = "Keyword"
             
-            for result in results:
-                memory = result["memory"]
-                score = result.get("relevance_score", 0)
-                score_pct = f"{score * 100:.1f}%" if score else "N/A"
-                
-                content_preview = memory["content"][:100] + "..." if len(memory["content"]) > 100 else memory["content"]
-                tags_str = ", ".join(memory.get("tags", []))
-                
-                table.add_row(score_pct, content_preview, tags_str)
+            content_preview = memory["content"][:100] + "..." if len(memory["content"]) > 100 else memory["content"]
+            tags_str = ", ".join(memory.get("tags", []))
             
-            console.print(table)
-            
-        else:  # keyword mode
-            results = memory_system.keyword_search(query)
-            
-            if not results:
-                console.print(f"[yellow]No memories found for: {query}[/yellow]")
-                return
-            
-            table = Table(
-                title=f"Keyword Search Results for: {query}",
-                box=box.ROUNDED,
-                show_header=True,
-                header_style="bold cyan"
-            )
-            table.add_column("ID", style="dim", width=12)
-            table.add_column("Content", style="white", width=60)
-            table.add_column("Tags", style="magenta", width=20)
-            
-            for memory in results[:limit]:
-                mem_dict = memory.to_dict()
-                content_preview = mem_dict["content"][:100] + "..." if len(mem_dict["content"]) > 100 else mem_dict["content"]
-                tags_str = ", ".join(mem_dict.get("tags", []))
-                
-                table.add_row(mem_dict["id"][:12], content_preview, tags_str)
-            
-            console.print(table)
-            
+            table.add_row(score_pct, content_preview, tags_str, match_type)
+        
+        console.print(table)
+        console.print(f"\n[dim]Search powered by hybrid algorithm (85% semantic, 15% keyword)[/dim]")
+        
     except Exception as e:
         console.print(f"[red]✗[/red] Error searching memories: {e}", style="red")
         logger.error(f"Error in search command: {e}", exc_info=True)

@@ -1,6 +1,7 @@
 """
 Enhanced memory system with semantic search capabilities.
 Integrates JSON storage with ChromaDB vector store.
+Now includes hybrid search (semantic + keyword fusion).
 """
 import json
 import uuid
@@ -59,7 +60,13 @@ class MemorySystem:
     Enhanced memory system with dual storage:
     - JSON for structured data and fast keyword search
     - ChromaDB for semantic vector search
+    - Hybrid search combining both approaches
     """
+    
+    # Hybrid search weights (semantic/keyword)
+    # Based on industry research: semantic bias for conceptual queries
+    SEMANTIC_WEIGHT = 0.85
+    KEYWORD_WEIGHT = 0.15
     
     def __init__(
         self,
@@ -129,29 +136,28 @@ class MemorySystem:
         Returns:
             Created Memory object
         """
-        print("MEMORY_SYSTEM DEBUG 1: Start of add()")
-        print(f"MEMORY_SYSTEM DEBUG 2: content={content}, tags={tags}")
         memory = Memory(content=content, tags=tags, metadata=metadata)
-        print(f"MEMORY_SYSTEM DEBUG 3: Memory object created, id={memory.id}")
         
         # Add to JSON storage
         self.memories[memory.id] = memory
-        print("MEMORY_SYSTEM DEBUG 4: Added to self.memories dict")
         self._save_memories()
-        print("MEMORY_SYSTEM DEBUG 5: _save_memories() completed")
+        
+        # Prepare vector store metadata
+        vector_metadata = {
+            "timestamp": memory.timestamp,
+            **(metadata or {})
+        }
+        
+        # Only add tags if they're non-empty (ChromaDB doesn't like empty lists)
+        if tags and len(tags) > 0:
+            vector_metadata["tags"] = tags
         
         # Add to vector store
-        print("MEMORY_SYSTEM DEBUG 6: About to call vector_store.add_memory()")
         self.vector_store.add_memory(
             memory_id=memory.id,
             content=content,
-            metadata={
-                "tags": ", ".join(tags) if tags else "",
-                "timestamp": memory.timestamp,
-                **(metadata or {})
-            }
+            metadata=vector_metadata
         )
-        print("MEMORY_SYSTEM DEBUG 7: vector_store.add_memory() completed")
         
         logger.info(f"Added memory {memory.id}")
         return memory
@@ -176,7 +182,10 @@ class MemorySystem:
         # Build where filter for tags if provided
         where_filter = None
         if tags:
-            where_filter = {"tags": {"$in": tags}}
+            # Use $contains for list filtering in ChromaDB
+            # This checks if ANY of the provided tags exist in the memory's tags
+            where_filter = {"tags": {"$contains": tags[0]}} if len(tags) == 1 else None
+            # Note: Complex tag filtering (AND/OR) can be added later
         
         results = self.vector_store.search(
             query=query,
@@ -198,27 +207,175 @@ class MemorySystem:
         
         return enriched_results
     
-    def keyword_search(self, keyword: str) -> List[Memory]:
+    def keyword_search(self, keyword: str) -> List[Dict[str, Any]]:
         """
-        Search memories using keyword matching (legacy search).
+        Search memories using keyword matching.
         
         Args:
             keyword: Keyword to search for
         
         Returns:
-            List of matching Memory objects
+            List of matching memories with keyword match scores
         """
         keyword_lower = keyword.lower()
         results = []
         
         for memory in self.memories.values():
+            score = 0.0
+            
+            # Check content (case-insensitive)
             if keyword_lower in memory.content.lower():
-                results.append(memory)
-            elif any(keyword_lower in tag.lower() for tag in memory.tags):
-                results.append(memory)
+                # Calculate score based on term frequency
+                count = memory.content.lower().count(keyword_lower)
+                # Normalize by content length (favor shorter, focused memories)
+                score += min(count / max(len(memory.content.split()), 1), 1.0) * 0.8
+            
+            # Check tags (exact match gets higher score)
+            for tag in memory.tags:
+                if keyword_lower == tag.lower():
+                    score += 0.3  # Exact tag match
+                elif keyword_lower in tag.lower():
+                    score += 0.15  # Partial tag match
+            
+            if score > 0:
+                results.append({
+                    "memory": memory.to_dict(),
+                    "keyword_score": min(score, 1.0)  # Cap at 1.0
+                })
         
-        # Sort by timestamp (most recent first)
-        results.sort(key=lambda m: m.timestamp, reverse=True)
+        # Sort by keyword score (highest first)
+        results.sort(key=lambda x: x["keyword_score"], reverse=True)
+        return results
+    
+    def hybrid_search(
+        self,
+        query: str,
+        n_results: int = 5,
+        tags: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Search memories using hybrid approach (semantic + keyword fusion).
+        
+        Uses normalized score fusion with learned weights:
+        - Semantic search captures conceptual similarity
+        - Keyword search captures exact term matches
+        - Scores are normalized and combined with industry-standard weights
+        
+        Args:
+            query: Search query
+            n_results: Number of results to return
+            tags: Filter by tags (optional)
+        
+        Returns:
+            List of matching memories with combined relevance scores
+        """
+        # Get results from both search methods (fetch more for better fusion)
+        fetch_count = min(n_results * 3, 20)  # Fetch 3x requested, max 20
+        
+        semantic_results = self.semantic_search(query, n_results=fetch_count, tags=tags)
+        keyword_results = self.keyword_search(query)[:fetch_count]
+        
+        # Normalize scores within each result set
+        semantic_normalized = self._normalize_scores(
+            semantic_results,
+            score_key="relevance_score"
+        )
+        keyword_normalized = self._normalize_scores(
+            keyword_results,
+            score_key="keyword_score"
+        )
+        
+        # Merge results by memory ID
+        merged_scores = {}
+        
+        # Add semantic results
+        for result in semantic_normalized:
+            memory_id = result["memory"]["id"]
+            merged_scores[memory_id] = {
+                "memory": result["memory"],
+                "semantic_score": result.get("normalized_score", 0.0),
+                "keyword_score": 0.0,  # Default if not in keyword results
+                "sources": ["semantic"]
+            }
+        
+        # Add/update with keyword results
+        for result in keyword_normalized:
+            memory_id = result["memory"]["id"]
+            if memory_id in merged_scores:
+                # Memory appears in both - update keyword score
+                merged_scores[memory_id]["keyword_score"] = result.get("normalized_score", 0.0)
+                merged_scores[memory_id]["sources"].append("keyword")
+            else:
+                # Memory only in keyword results
+                merged_scores[memory_id] = {
+                    "memory": result["memory"],
+                    "semantic_score": 0.0,
+                    "keyword_score": result.get("normalized_score", 0.0),
+                    "sources": ["keyword"]
+                }
+        
+        # Calculate final hybrid scores
+        final_results = []
+        for memory_id, data in merged_scores.items():
+            # Weighted fusion of normalized scores
+            hybrid_score = (
+                data["semantic_score"] * self.SEMANTIC_WEIGHT +
+                data["keyword_score"] * self.KEYWORD_WEIGHT
+            )
+            
+            final_results.append({
+                "memory": data["memory"],
+                "hybrid_score": hybrid_score,
+                "semantic_score": data["semantic_score"],
+                "keyword_score": data["keyword_score"],
+                "sources": data["sources"]
+            })
+        
+        # Sort by hybrid score and return top N
+        final_results.sort(key=lambda x: x["hybrid_score"], reverse=True)
+        
+        logger.info(f"Hybrid search: {len(semantic_results)} semantic + "
+                   f"{len(keyword_results)} keyword → {len(final_results)} merged")
+        
+        return final_results[:n_results]
+    
+    def _normalize_scores(
+        self,
+        results: List[Dict[str, Any]],
+        score_key: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Normalize scores to 0-1 range using min-max normalization.
+        
+        Args:
+            results: List of search results
+            score_key: Key containing the score to normalize
+        
+        Returns:
+            Results with added 'normalized_score' field
+        """
+        if not results:
+            return []
+        
+        # Extract scores
+        scores = [r.get(score_key, 0.0) for r in results]
+        
+        # Handle edge cases
+        min_score = min(scores)
+        max_score = max(scores)
+        score_range = max_score - min_score
+        
+        if score_range == 0:
+            # All scores are identical - assign 1.0 to all
+            for result in results:
+                result["normalized_score"] = 1.0
+        else:
+            # Min-max normalization
+            for i, result in enumerate(results):
+                original_score = scores[i]
+                normalized = (original_score - min_score) / score_range
+                result["normalized_score"] = normalized
+        
         return results
     
     def get(self, memory_id: str) -> Optional[Memory]:
@@ -272,15 +429,21 @@ class MemorySystem:
         # Save to JSON
         self._save_memories()
         
+        # Prepare vector store metadata
+        vector_metadata = {
+            "timestamp": memory.timestamp,
+            **memory.metadata
+        }
+        
+        # Only add tags if they're non-empty (ChromaDB doesn't like empty lists)
+        if memory.tags and len(memory.tags) > 0:
+            vector_metadata["tags"] = memory.tags
+        
         # Update vector store
         self.vector_store.update_memory(
             memory_id=memory_id,
             content=memory.content,
-            metadata={
-                "tags": memory.tags,
-                "timestamp": memory.timestamp,
-                **memory.metadata
-            }
+            metadata=vector_metadata
         )
         
         logger.info(f"Updated memory {memory_id}")
@@ -323,7 +486,11 @@ class MemorySystem:
             "total_memories": total,
             "unique_tags": len(tags),
             "json_path": str(self.json_path),
-            "vector_store": vector_stats
+            "vector_store": vector_stats,
+            "hybrid_search_weights": {
+                "semantic": self.SEMANTIC_WEIGHT,
+                "keyword": self.KEYWORD_WEIGHT
+            }
         }
     
     def reset(self) -> None:

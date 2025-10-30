@@ -23,6 +23,8 @@ dependencies = [
     "chromadb>=0.4.22",
     "click>=8.1.7",
     "rich>=13.7.0",
+    "sentence-transformers>=2.0.0", 
+    "diskcache>=5.0.0", 
 ]
 
 [project.optional-dependencies]

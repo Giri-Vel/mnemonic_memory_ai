@@ -122,9 +122,9 @@ class TestMemorySystem:
         
         # Search for Python
         results = memory_system.keyword_search("Python")
-        
+
         assert len(results) == 2
-        assert all("python" in m.content.lower() for m in results)
+        assert all("python" in m["memory"]["content"].lower() for m in results)
     
     def test_keyword_search_with_tags(self, memory_system):
         """Test keyword search matching tags."""
@@ -132,9 +132,9 @@ class TestMemorySystem:
         memory_system.add("Other content", tags=["javascript"])
         
         results = memory_system.keyword_search("python")
-        
+
         assert len(results) == 1
-        assert "python" in results[0].tags
+        assert "python" in results[0]["memory"]["tags"]
     
     def test_get_memory(self, memory_system):
         """Test retrieving a specific memory."""

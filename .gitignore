@@ -208,3 +208,4 @@ marimo/_lsp/
 __marimo__/
 
 get-pip.py
+CHAT_TEMPLATE.md

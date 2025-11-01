@@ -12,6 +12,7 @@ from rich import box
 
 from mnemonic.memory_system import MemorySystem
 
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -32,6 +33,7 @@ def cli():
     A local-first memory system that learns and remembers.
     """
     pass
+
 
 
 # @cli.command()
@@ -278,6 +280,10 @@ def reset():
         console.print(f"[red]✗[/red] Error resetting memory system: {e}", style="red")
         logger.error(f"Error in reset command: {e}", exc_info=True)
 
+
+
+from mnemonic.cli_entities import entities_group
+cli.add_command(entities_group, name='entities')
 
 # if __name__ == "__main__":
 #     cli()

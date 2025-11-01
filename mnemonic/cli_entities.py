@@ -300,6 +300,30 @@ def show_extraction_status(recent):
         console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
 
+@entities_group.command(name='rediscover')
+@click.option('--days', '-d', default=90, help='Days since last mention')
+def rediscover_entities(days):
+    """Discover entities you haven't mentioned recently"""
+    from mnemonic.entity_type_manager import EntityTypeManager
+    from mnemonic.config import DB_PATH
+    
+    manager = EntityTypeManager(DB_PATH)
+    suggestions = manager.get_rediscovery_suggestions(days_ago=days, limit=5)
+    
+    if not suggestions:
+        console.print("[yellow]No rediscovery suggestions found[/yellow]")
+        console.print("\n[dim](You need entities with frequency >= 3 not seen in 90+ days)[/dim]\n")
+        return
+    
+    console.print(f"\n💭 [bold]Remember These?[/bold] (not mentioned in {days}+ days)\n")
+    
+    for item in suggestions:
+        console.print(f"• [cyan]{item['text']}[/cyan]")
+        console.print(f"  Mentioned {item['frequency']} times")
+        console.print(f"  Last seen: {item['last_mention']} ({item['days_ago']} days ago)\n")
+
+
+
 # For testing
 if __name__ == "__main__":
     entities_group()

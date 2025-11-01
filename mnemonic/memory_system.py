@@ -18,6 +18,10 @@ import logging
 
 from mnemonic.vector_store import VectorStore
 from mnemonic.config import DB_PATH
+from mnemonic.entity_extractor import EntityExtractor
+from mnemonic.entity_storage import EntityStorage
+from mnemonic.checkpointing import CheckpointManager
+
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +104,17 @@ class MemorySystem:
         # Load existing memories
         self.memories: Dict[str, Memory] = {}
         self._load_memories()
+
+        try:
+            self.entity_extractor = EntityExtractor(self.db_path)
+            self.entity_storage = EntityStorage(self.db_path)
+            self.checkpoint_manager = CheckpointManager(self.db_path)
+            logger.info("Entity extraction system initialized")
+        except Exception as e:
+            logger.warning(f"Entity extraction not available: {e}")
+            self.entity_extractor = None
+            self.entity_storage = None
+            self.checkpoint_manager = None
     
     def _load_memories(self) -> None:
         """Load memories from JSON storage."""
@@ -342,6 +357,33 @@ class MemorySystem:
             sqlite_id = self._save_to_sqlite(memory)
             sqlite_saved = True
             logger.debug(f"✓ SQLite storage: {memory.id} (sqlite_id={sqlite_id})")
+
+            # 4. Extract and store entities (if available)
+            if self.entity_extractor and self.entity_storage:
+                try:
+                    entities = self.entity_extractor.extract(content, tags or [])
+                    stats = self.entity_storage.store_entities(sqlite_id, entities)
+                    logger.debug(f"✓ Entities: {len(entities)} extracted "
+                                f"(T:{stats['tentative_added']}, "
+                                f"P:{stats['promoted']}, "
+                                f"U:{stats['frequency_updated']})")
+                except Exception as e:
+                    # Non-critical - log but don't fail
+                    logger.warning(f"Entity extraction failed: {e}")
+
+            # 5. Create checkpoint (if available)
+            if self.checkpoint_manager:
+                try:
+                    self.checkpoint_manager.create_checkpoint(
+                        memory_id=sqlite_id,
+                        text=content,
+                        entities=entities if 'entities' in locals() else [],
+                        user_labels=self.entity_extractor.user_labels if self.entity_extractor else []
+                    )
+                    logger.debug(f"✓ Checkpoint created")
+                except Exception as e:
+                    # Non-critical - log but don't fail
+                    logger.warning(f"Checkpoint creation failed: {e}")
             
             logger.info(f"Added memory {memory.id} to all storage systems")
             return memory

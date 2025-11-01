@@ -1,16 +1,23 @@
 """
 Enhanced memory system with semantic search capabilities.
-Integrates JSON storage with ChromaDB vector store.
+Integrates JSON storage with ChromaDB vector store AND SQLite database.
 Now includes hybrid search (semantic + keyword fusion).
+
+STORAGE COUPLING:
+- JSON: Fast keyword search + data persistence
+- ChromaDB: Semantic vector search
+- SQLite: Entity extraction + structured queries
 """
 import json
 import uuid
+import sqlite3
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import logging
 
 from mnemonic.vector_store import VectorStore
+from mnemonic.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +64,11 @@ class Memory:
 
 class MemorySystem:
     """
-    Enhanced memory system with dual storage:
+    Enhanced memory system with triple storage:
     - JSON for structured data and fast keyword search
     - ChromaDB for semantic vector search
-    - Hybrid search combining both approaches
+    - SQLite for entity extraction and structured queries
+    - Hybrid search combining semantic + keyword
     """
     
     # Hybrid search weights (semantic/keyword)
@@ -74,7 +82,7 @@ class MemorySystem:
         vector_path: str = ".mnemonic/chroma"
     ):
         """
-        Initialize memory system with JSON and vector storage.
+        Initialize memory system with JSON, vector, and SQLite storage.
         
         Args:
             json_path: Path to JSON storage file
@@ -85,6 +93,9 @@ class MemorySystem:
         
         # Initialize vector store
         self.vector_store = VectorStore(persist_directory=vector_path)
+        
+        # SQLite database path (from config)
+        self.db_path = DB_PATH
         
         # Load existing memories
         self.memories: Dict[str, Memory] = {}
@@ -119,6 +130,159 @@ class MemorySystem:
             logger.error(f"Error saving memories: {e}")
             raise
     
+    def _save_to_sqlite(
+        self,
+        memory: Memory
+    ) -> int:
+        """
+        Save memory to SQLite database.
+        
+        Args:
+            memory: Memory object to save
+        
+        Returns:
+            SQLite row ID (INTEGER)
+        
+        Raises:
+            Exception if save fails
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Insert into memories table
+            cursor.execute("""
+                INSERT INTO memories (content, uuid, created_at)
+                VALUES (?, ?, ?)
+            """, (
+                memory.content,
+                memory.id,  # Store UUID for cross-reference
+                memory.timestamp
+            ))
+            
+            sqlite_id = cursor.lastrowid
+            
+            # Insert tags into memory_tags table
+            if memory.tags:
+                for tag in memory.tags:
+                    cursor.execute("""
+                        INSERT INTO memory_tags (memory_id, tag)
+                        VALUES (?, ?)
+                    """, (sqlite_id, tag.strip()))
+            
+            conn.commit()
+            logger.debug(f"Saved memory to SQLite (id={sqlite_id}, uuid={memory.id})")
+            
+            return sqlite_id
+            
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Error saving to SQLite: {e}")
+            raise
+        finally:
+            conn.close()
+    
+    def _update_sqlite(
+        self,
+        memory: Memory
+    ) -> bool:
+        """
+        Update memory in SQLite database.
+        
+        Args:
+            memory: Memory object with updated data
+        
+        Returns:
+            True if successful, False if memory not found
+        
+        Raises:
+            Exception if update fails
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Update memories table
+            cursor.execute("""
+                UPDATE memories 
+                SET content = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE uuid = ?
+            """, (memory.content, memory.id))
+            
+            if cursor.rowcount == 0:
+                # Memory doesn't exist in SQLite
+                logger.warning(f"Memory {memory.id} not found in SQLite for update")
+                conn.close()
+                return False
+            
+            # Get SQLite id for tag updates
+            cursor.execute("SELECT id FROM memories WHERE uuid = ?", (memory.id,))
+            sqlite_id = cursor.fetchone()[0]
+            
+            # Update tags: delete old, insert new
+            cursor.execute("DELETE FROM memory_tags WHERE memory_id = ?", (sqlite_id,))
+            
+            if memory.tags:
+                for tag in memory.tags:
+                    cursor.execute("""
+                        INSERT INTO memory_tags (memory_id, tag)
+                        VALUES (?, ?)
+                    """, (sqlite_id, tag.strip()))
+            
+            conn.commit()
+            logger.debug(f"Updated memory in SQLite (uuid={memory.id})")
+            
+            return True
+            
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Error updating SQLite: {e}")
+            raise
+        finally:
+            conn.close()
+    
+    def _delete_from_sqlite(
+        self,
+        memory_id: str
+    ) -> bool:
+        """
+        Delete memory from SQLite database.
+        
+        Args:
+            memory_id: UUID of memory to delete
+        
+        Returns:
+            True if successful, False if memory not found
+        
+        Raises:
+            Exception if delete fails
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Delete from memories (CASCADE will delete tags)
+            cursor.execute("""
+                DELETE FROM memories WHERE uuid = ?
+            """, (memory_id,))
+            
+            deleted = cursor.rowcount > 0
+            conn.commit()
+            
+            if deleted:
+                logger.debug(f"Deleted memory from SQLite (uuid={memory_id})")
+            else:
+                logger.warning(f"Memory {memory_id} not found in SQLite for deletion")
+            
+            return deleted
+            
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Error deleting from SQLite: {e}")
+            raise
+        finally:
+            conn.close()
+    
     def add(
         self,
         content: str,
@@ -126,7 +290,10 @@ class MemorySystem:
         metadata: Optional[Dict[str, Any]] = None
     ) -> Memory:
         """
-        Add a new memory to both JSON and vector storage.
+        Add a new memory to ALL storage systems (JSON + ChromaDB + SQLite).
+        
+        Uses transactional approach: if ANY storage fails, the operation fails.
+        This ensures data consistency across all systems.
         
         Args:
             content: Memory content
@@ -135,32 +302,78 @@ class MemorySystem:
         
         Returns:
             Created Memory object
+        
+        Raises:
+            Exception if any storage system fails
         """
         memory = Memory(content=content, tags=tags, metadata=metadata)
         
-        # Add to JSON storage
-        self.memories[memory.id] = memory
-        self._save_memories()
+        # Track what we've saved for rollback
+        json_saved = False
+        vector_saved = False
+        sqlite_saved = False
         
-        # Prepare vector store metadata
-        vector_metadata = {
-            "timestamp": memory.timestamp,
-            **(metadata or {})
-        }
-        
-        # Only add tags if they're non-empty (ChromaDB doesn't like empty lists)
-        if tags and len(tags) > 0:
-            vector_metadata["tags"] = tags
-        
-        # Add to vector store
-        self.vector_store.add_memory(
-            memory_id=memory.id,
-            content=content,
-            metadata=vector_metadata
-        )
-        
-        logger.info(f"Added memory {memory.id}")
-        return memory
+        try:
+            # 1. Add to JSON storage (primary source of truth)
+            self.memories[memory.id] = memory
+            self._save_memories()
+            json_saved = True
+            logger.debug(f"✓ JSON storage: {memory.id}")
+            
+            # 2. Add to vector store (for semantic search)
+            vector_metadata = {
+                "timestamp": memory.timestamp,
+                **(metadata or {})
+            }
+            
+            # Only add tags if they're non-empty (ChromaDB doesn't like empty lists)
+            if tags and len(tags) > 0:
+                vector_metadata["tags"] = tags
+            
+            self.vector_store.add_memory(
+                memory_id=memory.id,
+                content=content,
+                metadata=vector_metadata
+            )
+            vector_saved = True
+            logger.debug(f"✓ Vector storage: {memory.id}")
+            
+            # 3. Add to SQLite (for entity extraction)
+            sqlite_id = self._save_to_sqlite(memory)
+            sqlite_saved = True
+            logger.debug(f"✓ SQLite storage: {memory.id} (sqlite_id={sqlite_id})")
+            
+            logger.info(f"Added memory {memory.id} to all storage systems")
+            return memory
+            
+        except Exception as e:
+            # ROLLBACK: Remove from successfully saved storages
+            logger.error(f"Failed to add memory {memory.id}: {e}")
+            
+            if json_saved:
+                try:
+                    del self.memories[memory.id]
+                    self._save_memories()
+                    logger.debug("↩ Rolled back JSON storage")
+                except Exception as rollback_error:
+                    logger.error(f"Failed to rollback JSON: {rollback_error}")
+            
+            if vector_saved:
+                try:
+                    self.vector_store.delete_memory(memory.id)
+                    logger.debug("↩ Rolled back vector storage")
+                except Exception as rollback_error:
+                    logger.error(f"Failed to rollback vector storage: {rollback_error}")
+            
+            if sqlite_saved:
+                try:
+                    self._delete_from_sqlite(memory.id)
+                    logger.debug("↩ Rolled back SQLite storage")
+                except Exception as rollback_error:
+                    logger.error(f"Failed to rollback SQLite: {rollback_error}")
+            
+            # Re-raise the original exception
+            raise
     
     def semantic_search(
         self,
@@ -399,7 +612,7 @@ class MemorySystem:
         metadata: Optional[Dict[str, Any]] = None
     ) -> Optional[Memory]:
         """
-        Update an existing memory.
+        Update an existing memory in ALL storage systems.
         
         Args:
             memory_id: Memory identifier
@@ -416,42 +629,81 @@ class MemorySystem:
         
         memory = self.memories[memory_id]
         
-        # Update fields
-        if content is not None:
-            memory.content = content
-        if tags is not None:
-            memory.tags = tags
-        if metadata is not None:
-            memory.metadata.update(metadata)
+        # Track what we've updated for rollback
+        json_updated = False
+        vector_updated = False
+        sqlite_updated = False
         
-        memory.metadata["updated_at"] = datetime.now().isoformat()
+        # Store original state for rollback
+        original_content = memory.content
+        original_tags = memory.tags.copy()
+        original_metadata = memory.metadata.copy()
         
-        # Save to JSON
-        self._save_memories()
-        
-        # Prepare vector store metadata
-        vector_metadata = {
-            "timestamp": memory.timestamp,
-            **memory.metadata
-        }
-        
-        # Only add tags if they're non-empty (ChromaDB doesn't like empty lists)
-        if memory.tags and len(memory.tags) > 0:
-            vector_metadata["tags"] = memory.tags
-        
-        # Update vector store
-        self.vector_store.update_memory(
-            memory_id=memory_id,
-            content=memory.content,
-            metadata=vector_metadata
-        )
-        
-        logger.info(f"Updated memory {memory_id}")
-        return memory
+        try:
+            # Update fields
+            if content is not None:
+                memory.content = content
+            if tags is not None:
+                memory.tags = tags
+            if metadata is not None:
+                memory.metadata.update(metadata)
+            
+            memory.metadata["updated_at"] = datetime.now().isoformat()
+            
+            # 1. Save to JSON
+            self._save_memories()
+            json_updated = True
+            logger.debug(f"✓ Updated JSON: {memory_id}")
+            
+            # 2. Update vector store
+            vector_metadata = {
+                "timestamp": memory.timestamp,
+                **memory.metadata
+            }
+            
+            if memory.tags and len(memory.tags) > 0:
+                vector_metadata["tags"] = memory.tags
+            
+            self.vector_store.update_memory(
+                memory_id=memory_id,
+                content=memory.content,
+                metadata=vector_metadata
+            )
+            vector_updated = True
+            logger.debug(f"✓ Updated vector store: {memory_id}")
+            
+            # 3. Update SQLite
+            self._update_sqlite(memory)
+            sqlite_updated = True
+            logger.debug(f"✓ Updated SQLite: {memory_id}")
+            
+            logger.info(f"Updated memory {memory_id} in all storage systems")
+            return memory
+            
+        except Exception as e:
+            # ROLLBACK: Restore original state
+            logger.error(f"Failed to update memory {memory_id}: {e}")
+            
+            if json_updated:
+                try:
+                    memory.content = original_content
+                    memory.tags = original_tags
+                    memory.metadata = original_metadata
+                    self._save_memories()
+                    logger.debug("↩ Rolled back JSON storage")
+                except Exception as rollback_error:
+                    logger.error(f"Failed to rollback JSON: {rollback_error}")
+            
+            # Note: Vector and SQLite rollback would need original state too
+            # For now, log the inconsistency
+            if vector_updated or sqlite_updated:
+                logger.error(f"Partial update detected - manual intervention may be needed")
+            
+            raise
     
     def delete(self, memory_id: str) -> bool:
         """
-        Delete a memory from both storages.
+        Delete a memory from ALL storage systems.
         
         Args:
             memory_id: Memory identifier
@@ -463,15 +715,51 @@ class MemorySystem:
             logger.warning(f"Memory {memory_id} not found")
             return False
         
-        # Delete from JSON
-        del self.memories[memory_id]
-        self._save_memories()
+        # Store memory for potential rollback
+        deleted_memory = self.memories[memory_id]
         
-        # Delete from vector store
-        self.vector_store.delete_memory(memory_id)
+        # Track what we've deleted
+        json_deleted = False
+        vector_deleted = False
+        sqlite_deleted = False
         
-        logger.info(f"Deleted memory {memory_id}")
-        return True
+        try:
+            # 1. Delete from JSON
+            del self.memories[memory_id]
+            self._save_memories()
+            json_deleted = True
+            logger.debug(f"✓ Deleted from JSON: {memory_id}")
+            
+            # 2. Delete from vector store
+            self.vector_store.delete_memory(memory_id)
+            vector_deleted = True
+            logger.debug(f"✓ Deleted from vector store: {memory_id}")
+            
+            # 3. Delete from SQLite
+            self._delete_from_sqlite(memory_id)
+            sqlite_deleted = True
+            logger.debug(f"✓ Deleted from SQLite: {memory_id}")
+            
+            logger.info(f"Deleted memory {memory_id} from all storage systems")
+            return True
+            
+        except Exception as e:
+            # ROLLBACK: Restore deleted memory
+            logger.error(f"Failed to delete memory {memory_id}: {e}")
+            
+            if json_deleted:
+                try:
+                    self.memories[memory_id] = deleted_memory
+                    self._save_memories()
+                    logger.debug("↩ Rolled back JSON storage")
+                except Exception as rollback_error:
+                    logger.error(f"Failed to rollback JSON: {rollback_error}")
+            
+            # Note: Vector and SQLite rollback would need to re-add
+            if vector_deleted or sqlite_deleted:
+                logger.error(f"Partial deletion detected - manual intervention may be needed")
+            
+            raise
     
     def get_stats(self) -> Dict[str, Any]:
         """Get statistics about the memory system."""
@@ -482,11 +770,24 @@ class MemorySystem:
         
         vector_stats = self.vector_store.get_stats()
         
+        # Get SQLite stats
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM memories")
+            sqlite_count = cursor.fetchone()[0]
+            conn.close()
+        except Exception as e:
+            logger.error(f"Error getting SQLite stats: {e}")
+            sqlite_count = 0
+        
         return {
             "total_memories": total,
             "unique_tags": len(tags),
             "json_path": str(self.json_path),
             "vector_store": vector_stats,
+            "sqlite_memories": sqlite_count,
+            "sqlite_db_path": str(self.db_path),
             "hybrid_search_weights": {
                 "semantic": self.SEMANTIC_WEIGHT,
                 "keyword": self.KEYWORD_WEIGHT
@@ -494,8 +795,21 @@ class MemorySystem:
         }
     
     def reset(self) -> None:
-        """Reset the entire memory system."""
+        """Reset the entire memory system (all storages)."""
         self.memories = {}
         self._save_memories()
         self.vector_store.reset()
-        logger.info("Memory system reset successfully")
+        
+        # Reset SQLite
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM memory_tags")
+            cursor.execute("DELETE FROM memories")
+            conn.commit()
+            conn.close()
+            logger.info("SQLite storage reset")
+        except Exception as e:
+            logger.error(f"Error resetting SQLite: {e}")
+        
+        logger.info("Memory system reset successfully (all storages cleared)")

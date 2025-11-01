@@ -74,5 +74,175 @@
       "timestamp": "2025-11-01T14:16:32.951581"
     },
     "timestamp": "2025-11-01T14:16:32.951581"
+  },
+  "16b2d741-3669-4ede-a7a9-8ff0b4e09fb6": {
+    "id": "16b2d741-3669-4ede-a7a9-8ff0b4e09fb6",
+    "content": "Testing fresh sync",
+    "tags": [
+      "test"
+    ],
+    "metadata": {
+      "timestamp": "2025-11-01T18:20:31.966453"
+    },
+    "timestamp": "2025-11-01T18:20:31.966453"
+  },
+  "9ddd83d0-7eb5-4c5d-a1f7-bdd4ac2ce945": {
+    "id": "9ddd83d0-7eb5-4c5d-a1f7-bdd4ac2ce945",
+    "content": "original content",
+    "tags": [
+      "original-tags"
+    ],
+    "metadata": {
+      "timestamp": "2025-11-01T18:21:18.298354"
+    },
+    "timestamp": "2025-11-01T18:21:18.298354"
+  },
+  "7785ee76-1005-4b71-b930-b60f20b20505": {
+    "id": "7785ee76-1005-4b71-b930-b60f20b20505",
+    "content": "I love watching anime like Steins Gate",
+    "tags": [
+      "anime",
+      "entertainment"
+    ],
+    "metadata": {
+      "timestamp": "2025-11-01T18:26:00.011437"
+    },
+    "timestamp": "2025-11-01T18:26:00.011437"
+  },
+  "c9a40c26-074c-4b5b-bebf-7213f24e532f": {
+    "id": "c9a40c26-074c-4b5b-bebf-7213f24e532f",
+    "content": "Another anime memory about Code Geass",
+    "tags": [
+      "anime",
+      "tv"
+    ],
+    "metadata": {
+      "timestamp": "2025-11-01T18:26:14.538657"
+    },
+    "timestamp": "2025-11-01T18:26:14.538657"
+  },
+  "6141ab06-9c42-4e10-9ec3-32212249df22": {
+    "id": "6141ab06-9c42-4e10-9ec3-32212249df22",
+    "content": "My favorite car is the Toyota Supra",
+    "tags": [
+      "cars",
+      "automotive"
+    ],
+    "metadata": {
+      "timestamp": "2025-11-01T18:26:26.922008"
+    },
+    "timestamp": "2025-11-01T18:26:26.922008"
+  },
+  "9eda4ca4-3395-4b9c-97e8-cd09dbdb38ae": {
+    "id": "9eda4ca4-3395-4b9c-97e8-cd09dbdb38ae",
+    "content": "Tesla makes interesting electric cars",
+    "tags": [
+      "cars",
+      "tesla"
+    ],
+    "metadata": {
+      "timestamp": "2025-11-01T18:26:36.348136"
+    },
+    "timestamp": "2025-11-01T18:26:36.348136"
+  },
+  "d90e4ee1-4b9a-4f13-96aa-a385f7e7dd08": {
+    "id": "d90e4ee1-4b9a-4f13-96aa-a385f7e7dd08",
+    "content": "Learning Python programming",
+    "tags": [
+      "python",
+      "coding"
+    ],
+    "metadata": {
+      "timestamp": "2025-11-01T18:26:43.325959"
+    },
+    "timestamp": "2025-11-01T18:26:43.325959"
+  },
+  "cc0b1b81-ba95-449d-aa8e-ea35691d08bf": {
+    "id": "cc0b1b81-ba95-449d-aa8e-ea35691d08bf",
+    "content": "Watching Steins Gate episode 1",
+    "tags": [
+      "anime"
+    ],
+    "metadata": {
+      "timestamp": "2025-11-01T18:29:23.608210"
+    },
+    "timestamp": "2025-11-01T18:29:23.608210"
+  },
+  "e6ae5f2e-2a71-44dc-9955-f15aca40dc16": {
+    "id": "e6ae5f2e-2a71-44dc-9955-f15aca40dc16",
+    "content": "Code Geass is amazing",
+    "tags": [
+      "anime"
+    ],
+    "metadata": {
+      "timestamp": "2025-11-01T18:29:30.788943"
+    },
+    "timestamp": "2025-11-01T18:29:30.788943"
+  },
+  "4955b6c6-ebc6-4944-97fa-4d43feef4a7a": {
+    "id": "4955b6c6-ebc6-4944-97fa-4d43feef4a7a",
+    "content": "Death Note keeps me on edge",
+    "tags": [
+      "anime"
+    ],
+    "metadata": {
+      "timestamp": "2025-11-01T18:29:37.976572"
+    },
+    "timestamp": "2025-11-01T18:29:37.976572"
+  },
+  "c74a8743-2879-4a01-8ef7-ddbe5dd0bd77": {
+    "id": "c74a8743-2879-4a01-8ef7-ddbe5dd0bd77",
+    "content": "Attack on Titan finale was epic",
+    "tags": [
+      "anime"
+    ],
+    "metadata": {
+      "timestamp": "2025-11-01T18:29:44.983417"
+    },
+    "timestamp": "2025-11-01T18:29:44.983417"
+  },
+  "47d6e3c4-ac83-4ca5-839f-e6c3f0382e3e": {
+    "id": "47d6e3c4-ac83-4ca5-839f-e6c3f0382e3e",
+    "content": "Cowboy Bebop soundtrack is fire",
+    "tags": [
+      "anime"
+    ],
+    "metadata": {
+      "timestamp": "2025-11-01T18:29:51.988070"
+    },
+    "timestamp": "2025-11-01T18:29:51.988070"
+  },
+  "78edefbf-10fb-4efb-936c-9d12a7e2b918": {
+    "id": "78edefbf-10fb-4efb-936c-9d12a7e2b918",
+    "content": "Naruto running technique",
+    "tags": [
+      "anime"
+    ],
+    "metadata": {
+      "timestamp": "2025-11-01T18:34:38.672583"
+    },
+    "timestamp": "2025-11-01T18:34:38.672583"
+  },
+  "3941eb9e-5625-4c47-ba6e-0fc2dd1de49b": {
+    "id": "3941eb9e-5625-4c47-ba6e-0fc2dd1de49b",
+    "content": "One Piece treasure hunt",
+    "tags": [
+      "anime"
+    ],
+    "metadata": {
+      "timestamp": "2025-11-01T18:34:47.250058"
+    },
+    "timestamp": "2025-11-01T18:34:47.250058"
+  },
+  "a05c53a7-0bd3-47d9-a6d2-cbc6ac1ed9c3": {
+    "id": "a05c53a7-0bd3-47d9-a6d2-cbc6ac1ed9c3",
+    "content": "Dragon Ball power levels",
+    "tags": [
+      "anime"
+    ],
+    "metadata": {
+      "timestamp": "2025-11-01T18:34:55.122843"
+    },
+    "timestamp": "2025-11-01T18:34:55.122843"
   }
 }

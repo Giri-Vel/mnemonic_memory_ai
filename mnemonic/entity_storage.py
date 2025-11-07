@@ -54,7 +54,7 @@ class EntityStorage:
         
         if 'tentative_entities' not in existing_tables or 'entities' not in existing_tables:
             print("⚠ Entity tables not found. Run migration first:")
-            print("  python migrations/002_add_entity_tables.py <db_path>")
+            print("  python migrations/M002_add_entity_tables.py <db_path>")
         
         conn.close()
     
@@ -217,15 +217,17 @@ class EntityStorage:
             "second_occurrence_memory_id": memory_id
         })
         
+        # FIXED: Use correct number of placeholders (7 values)
         cursor.execute("""
             INSERT INTO entities 
             (text, type, type_source, confidence, frequency, memory_id, metadata)
-            VALUES (?, ?, ?, ?, 2, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
             entity.text,
             entity.type,
             entity.type_source,
             entity.confidence,
+            2,  # frequency = 2 on promotion
             original_memory_id,  # Store first occurrence memory_id
             metadata
         ))

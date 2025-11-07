@@ -1,12 +1,14 @@
 """
-CLI Commands for Entity Type Management (Day 7)
+CLI Commands for Entity Type Management (Day 5-7 Updated)
 
-New commands:
+Commands:
 - mnemonic entities suggest
 - mnemonic entities add-type <n>
 - mnemonic entities remove-type <n>
 - mnemonic entities list-types
 - mnemonic entities status
+- mnemonic entities reextract --worker    # NEW (Day 5)
+- mnemonic entities rediscover
 """
 
 import click
@@ -119,7 +121,8 @@ def add_entity_type(type_name):
         if success:
             console.print(f"[green]✓[/green] Added entity type '[bold]{type_name}[/bold]'")
             console.print("[dim]⚙ Re-extraction queued (processing in background)[/dim]")
-            console.print(f"[dim]💡 Check status with: [bold]mnemonic entities status[/bold][/dim]\n")
+            console.print(f"[dim]💡 Check status with: [bold]mnemonic entities status[/bold][/dim]")
+            console.print(f"[dim]💡 Run worker with: [bold]mnemonic entities reextract --worker[/bold][/dim]\n")
         else:
             console.print(f"[yellow]⚠[/yellow] Entity type '[bold]{type_name}[/bold]' already exists")
         
@@ -291,6 +294,10 @@ def show_extraction_status(recent):
                 )
             
             console.print(table)
+            
+            # Show hint if there are pending jobs
+            if status['pending'] > 0:
+                console.print(f"\n[dim]💡 Process pending jobs with: [bold]mnemonic entities reextract --worker[/bold][/dim]")
         else:
             console.print("\n[dim]No re-extraction jobs yet.[/dim]\n")
         
@@ -322,6 +329,144 @@ def rediscover_entities(days):
         console.print(f"  Mentioned {item['frequency']} times")
         console.print(f"  Last seen: {item['last_mention']} ({item['days_ago']} days ago)\n")
 
+
+@entities_group.command(name='reextract')
+@click.option('--worker', is_flag=True, help='Run as background worker')
+@click.option('--max-jobs', '-n', type=int, help='Maximum jobs to process')
+@click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
+def run_reextraction(worker, max_jobs, verbose):
+    """Run background re-extraction worker"""
+    try:
+        from mnemonic.reextraction_worker import ReextractionWorker
+        from mnemonic.config import DB_PATH
+        
+        if not Path(DB_PATH).exists():
+            console.print("[red]✗ Database not found. Store some memories first![/red]")
+            return
+        
+        console.print("\n[bold]Background Re-extraction Worker[/bold]")
+        console.print("-" * 70)
+        
+        # Initialize worker
+        console.print("Initializing worker...")
+        worker_instance = ReextractionWorker(DB_PATH, verbose=verbose)
+        console.print("[green]✓[/green] Worker initialized\n")
+        
+        # Show queue status
+        stats = worker_instance.get_worker_stats()
+        queue_status = stats['queue_status']
+        
+        console.print("Queue Status:")
+        console.print(f"  [yellow]Pending:[/yellow] {queue_status['pending']}")
+        console.print(f"  [blue]Processing:[/blue] {queue_status['processing']}")
+        console.print(f"  [green]Completed:[/green] {queue_status['completed']}")
+        console.print(f"  [red]Failed:[/red] {queue_status['failed']}")
+        
+        if queue_status['pending'] == 0:
+            console.print("\n[dim]No pending jobs to process.[/dim]\n")
+            return
+        
+        # Process jobs
+        console.print(f"\n[bold]Processing {queue_status['pending']} pending job(s)...[/bold]\n")
+        
+        results = worker_instance.process_pending_jobs(max_jobs=max_jobs)
+        
+        # Show results
+        console.print("\n" + "-" * 70)
+        console.print("[bold]Processing Complete[/bold]")
+        console.print(f"  Processed: {results['processed']}")
+        console.print(f"  [green]Succeeded: {results['succeeded']}[/green]")
+        console.print(f"  [red]Failed: {results['failed']}[/red]")
+        console.print()
+        
+    except ImportError as e:
+        console.print("[red]✗ Error: Required module not found[/red]")
+        console.print(f"[dim]GLiNER may not be installed: {e}[/dim]")
+    except Exception as e:
+        console.print(f"[red]✗ Error running worker: {e}[/red]")
+        import traceback
+        console.print(f"[dim]{traceback.format_exc()}[/dim]")
+
+
+@entities_group.command(name='cluster')
+@click.option('--threshold', '-t', type=float, default=0.8, help='Similarity threshold (0.0-1.0)')
+@click.option('--type', 'entity_type', help='Only cluster entities of this type')
+@click.option('--dry-run', is_flag=True, help='Preview clusters without updating database')
+@click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
+def cluster_entities(threshold, entity_type, dry_run, verbose):
+    """Cluster similar entities using fuzzy matching"""
+    try:
+        from mnemonic.entity_clustering import EntityClusterer
+        from mnemonic.config import DB_PATH
+        
+        if not Path(DB_PATH).exists():
+            console.print("[red]✗ Database not found. Store some memories first![/red]")
+            return
+        
+        console.print("\n[bold]Entity Clustering[/bold]")
+        console.print("-" * 70)
+        console.print(f"Similarity threshold: {threshold:.0%}")
+        if entity_type:
+            console.print(f"Entity type filter: {entity_type}")
+        if dry_run:
+            console.print("[yellow]DRY RUN MODE (no database changes)[/yellow]")
+        console.print()
+        
+        # Initialize clusterer
+        console.print("Initializing clusterer...")
+        clusterer = EntityClusterer(DB_PATH, verbose=verbose)
+        console.print("[green]✓[/green] Clusterer initialized\n")
+        
+        # Run clustering
+        console.print("Clustering entities...")
+        clusters = clusterer.cluster_entities(
+            threshold=threshold,
+            entity_type=entity_type,
+            dry_run=dry_run
+        )
+        
+        if not clusters:
+            console.print("\n[yellow]No clusters found.[/yellow]")
+            console.print("[dim]Try lowering the threshold or add more similar entities.[/dim]\n")
+            return
+        
+        # Display clusters
+        console.print(f"\n[green]✓[/green] Found {len(clusters)} cluster(s)\n")
+        
+        for cluster in clusters[:10]:  # Show first 10
+            console.print(f"[bold cyan]Cluster {cluster.cluster_id}[/bold cyan]")
+            console.print(f"  Representative: [green]{cluster.representative}[/green]")
+            console.print(f"  Total frequency: {cluster.total_frequency}")
+            console.print(f"  Similarity: {cluster.similarity_score:.0%}")
+            console.print(f"  Entities ({len(cluster.entities)}):")
+            for entity in cluster.entities[:5]:  # Show first 5
+                console.print(f"    • {entity['text']} (freq: {entity['frequency']})")
+            if len(cluster.entities) > 5:
+                console.print(f"    ... and {len(cluster.entities) - 5} more")
+            console.print()
+        
+        if len(clusters) > 10:
+            console.print(f"[dim]... and {len(clusters) - 10} more clusters[/dim]\n")
+        
+        # Show statistics
+        stats = clusterer.get_cluster_stats()
+        
+        console.print("-" * 70)
+        console.print("[bold]Clustering Statistics[/bold]")
+        console.print(f"  Total entities: {stats['total_entities']}")
+        console.print(f"  Clustered: {stats['clustered_entities']} ({stats['clustering_percentage']:.1f}%)")
+        console.print(f"  Total clusters: {stats['total_clusters']}")
+        console.print(f"  Avg cluster size: {stats['avg_cluster_size']:.1f}")
+        
+        if not dry_run:
+            console.print("\n[green]✓[/green] Database updated with cluster assignments")
+        
+        console.print()
+        
+    except Exception as e:
+        console.print(f"[red]✗ Error clustering entities: {e}[/red]")
+        import traceback
+        console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
 
 # For testing

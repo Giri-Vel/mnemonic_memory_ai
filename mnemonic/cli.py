@@ -285,5 +285,11 @@ def reset():
 from mnemonic.cli_entities import entities_group
 cli.add_command(entities_group, name='entities')
 
+try:
+    from mnemonic.cli_graph import graph
+    cli.add_command(graph, name='graph')
+except ImportError:
+    pass
+
 # if __name__ == "__main__":
 #     cli()

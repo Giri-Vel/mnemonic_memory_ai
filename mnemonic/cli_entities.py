@@ -1,5 +1,5 @@
 """
-CLI Commands for Entity Type Management (Day 5-7 Updated)
+CLI Commands for Entity Type Management + Timeline Analysis
 
 Commands:
 - mnemonic entities suggest
@@ -7,8 +7,13 @@ Commands:
 - mnemonic entities remove-type <n>
 - mnemonic entities list-types
 - mnemonic entities status
-- mnemonic entities reextract --worker    # NEW (Day 5)
+- mnemonic entities reextract --worker
 - mnemonic entities rediscover
+- mnemonic entities cluster
+- mnemonic timeline trending         # NEW: Week 4 Day 3
+- mnemonic timeline dormant           # NEW: Week 4 Day 3
+- mnemonic timeline show <entity>     # NEW: Week 4 Day 3
+- mnemonic timeline summary           # NEW: Week 4 Day 3
 """
 
 import click
@@ -33,17 +38,19 @@ def entities_group():
     pass
 
 
+# ============================================================================
+# ENTITY TYPE MANAGEMENT COMMANDS (existing)
+# ============================================================================
+
 @entities_group.command(name='suggest')
 @click.option('--limit', '-n', default=10, help='Number of suggestions to show')
 def suggest_entities(limit):
     """Suggest new entity types based on patterns in your memories"""
     try:
-        # Import here to avoid issues if migration not run yet
         from mnemonic.entity_type_manager import EntityTypeManager
         
         db_path = get_db_path()
         
-        # Check if database exists
         if not Path(db_path).exists():
             console.print("[yellow]⚠[/yellow] Database not found. Have you stored any memories yet?")
             console.print(f"[dim]Expected: {db_path}[/dim]\n")
@@ -61,7 +68,6 @@ def suggest_entities(limit):
                         "Add more memories to get suggestions![/dim]\n")
             return
         
-        # Create suggestions table
         table = Table(
             title=f"🔍 Suggested Entity Types",
             box=box.ROUNDED,
@@ -266,7 +272,6 @@ def show_extraction_status(recent):
             table.add_column("Entities", style="green", width=10)
             
             for job in jobs:
-                # Color status
                 status_colored = {
                     'pending': f"[yellow]{job.status}[/yellow]",
                     'processing': f"[blue]{job.status}[/blue]",
@@ -274,7 +279,6 @@ def show_extraction_status(recent):
                     'failed': f"[red]{job.status}[/red]"
                 }.get(job.status, job.status)
                 
-                # Progress bar
                 if job.status == 'processing' and job.memories_total > 0:
                     progress_pct = job.progress_percent
                     progress_str = f"{progress_pct:.0f}% ({job.memories_processed}/{job.memories_total})"
@@ -295,7 +299,6 @@ def show_extraction_status(recent):
             
             console.print(table)
             
-            # Show hint if there are pending jobs
             if status['pending'] > 0:
                 console.print(f"\n[dim]💡 Process pending jobs with: [bold]mnemonic entities reextract --worker[/bold][/dim]")
         else:
@@ -347,12 +350,10 @@ def run_reextraction(worker, max_jobs, verbose):
         console.print("\n[bold]Background Re-extraction Worker[/bold]")
         console.print("-" * 70)
         
-        # Initialize worker
         console.print("Initializing worker...")
         worker_instance = ReextractionWorker(DB_PATH, verbose=verbose)
         console.print("[green]✓[/green] Worker initialized\n")
         
-        # Show queue status
         stats = worker_instance.get_worker_stats()
         queue_status = stats['queue_status']
         
@@ -366,12 +367,10 @@ def run_reextraction(worker, max_jobs, verbose):
             console.print("\n[dim]No pending jobs to process.[/dim]\n")
             return
         
-        # Process jobs
         console.print(f"\n[bold]Processing {queue_status['pending']} pending job(s)...[/bold]\n")
         
         results = worker_instance.process_pending_jobs(max_jobs=max_jobs)
         
-        # Show results
         console.print("\n" + "-" * 70)
         console.print("[bold]Processing Complete[/bold]")
         console.print(f"  Processed: {results['processed']}")
@@ -412,12 +411,10 @@ def cluster_entities(threshold, entity_type, dry_run, verbose):
             console.print("[yellow]DRY RUN MODE (no database changes)[/yellow]")
         console.print()
         
-        # Initialize clusterer
         console.print("Initializing clusterer...")
         clusterer = EntityClusterer(DB_PATH, verbose=verbose)
         console.print("[green]✓[/green] Clusterer initialized\n")
         
-        # Run clustering
         console.print("Clustering entities...")
         clusters = clusterer.cluster_entities(
             threshold=threshold,
@@ -430,16 +427,15 @@ def cluster_entities(threshold, entity_type, dry_run, verbose):
             console.print("[dim]Try lowering the threshold or add more similar entities.[/dim]\n")
             return
         
-        # Display clusters
         console.print(f"\n[green]✓[/green] Found {len(clusters)} cluster(s)\n")
         
-        for cluster in clusters[:10]:  # Show first 10
+        for cluster in clusters[:10]:
             console.print(f"[bold cyan]Cluster {cluster.cluster_id}[/bold cyan]")
             console.print(f"  Representative: [green]{cluster.representative}[/green]")
             console.print(f"  Total frequency: {cluster.total_frequency}")
             console.print(f"  Similarity: {cluster.similarity_score:.0%}")
             console.print(f"  Entities ({len(cluster.entities)}):")
-            for entity in cluster.entities[:5]:  # Show first 5
+            for entity in cluster.entities[:5]:
                 console.print(f"    • {entity['text']} (freq: {entity['frequency']})")
             if len(cluster.entities) > 5:
                 console.print(f"    ... and {len(cluster.entities) - 5} more")
@@ -448,7 +444,6 @@ def cluster_entities(threshold, entity_type, dry_run, verbose):
         if len(clusters) > 10:
             console.print(f"[dim]... and {len(clusters) - 10} more clusters[/dim]\n")
         
-        # Show statistics
         stats = clusterer.get_cluster_stats()
         
         console.print("-" * 70)
@@ -465,6 +460,190 @@ def cluster_entities(threshold, entity_type, dry_run, verbose):
         
     except Exception as e:
         console.print(f"[red]✗ Error clustering entities: {e}[/red]")
+        import traceback
+        console.print(f"[dim]{traceback.format_exc()}[/dim]")
+
+
+# ============================================================================
+# TIMELINE ANALYSIS COMMANDS (NEW - Week 4 Day 3)
+# ============================================================================
+
+@entities_group.command(name='timeline-trending')
+@click.option('--limit', '-n', default=10, help='Number of entities to show')
+@click.option('--trend', '-t', help='Filter by trend type (increasing/burst/stable/declining/dormant)')
+def timeline_trending(limit, trend):
+    """Show trending entities based on activity score"""
+    try:
+        from mnemonic.entity_timeline import EntityTimelineAnalyzer
+        from mnemonic.config import DB_PATH
+        
+        if not Path(DB_PATH).exists():
+            console.print("[red]✗ Database not found. Store some memories first![/red]")
+            return
+        
+        console.print(f"\n📈 [bold]Trending Entities[/bold]")
+        if trend:
+            console.print(f"   Filter: {trend}")
+        console.print()
+        
+        analyzer = EntityTimelineAnalyzer(DB_PATH)
+        trending = analyzer.get_trending_entities(limit=limit, trend_type=trend)
+        
+        if not trending:
+            console.print("[yellow]No trending entities found.[/yellow]\n")
+            return
+        
+        table = Table(box=box.ROUNDED, show_header=True, header_style="bold cyan")
+        table.add_column("Rank", style="dim", width=4)
+        table.add_column("Entity", style="bold green", width=25)
+        table.add_column("Type", style="cyan", width=15)
+        table.add_column("Trend", width=12)
+        table.add_column("Activity", style="yellow", width=10)
+        table.add_column("Frequency", style="white", width=10)
+        
+        for i, timeline in enumerate(trending, 1):
+            emoji = analyzer._trend_emoji(timeline.trend)
+            trend_str = f"{emoji} {timeline.trend}"
+            activity_str = f"{timeline.activity_score:.0f}/100"
+            
+            table.add_row(
+                str(i),
+                timeline.entity_text,
+                timeline.entity_type or "untyped",
+                trend_str,
+                activity_str,
+                str(timeline.frequency)
+            )
+        
+        console.print(table)
+        console.print(f"\n[dim]💡 View timeline: [bold]mnemonic entities timeline-show <entity>[/bold][/dim]\n")
+        
+    except Exception as e:
+        console.print(f"[red]✗ Error getting trending entities: {e}[/red]")
+        import traceback
+        console.print(f"[dim]{traceback.format_exc()}[/dim]")
+
+
+@entities_group.command(name='timeline-dormant')
+@click.option('--limit', '-n', default=10, help='Number of entities to show')
+@click.option('--days', '-d', default=90, help='Minimum days since last mention')
+def timeline_dormant(limit, days):
+    """Find dormant entities (rediscovery suggestions)"""
+    try:
+        from mnemonic.entity_timeline import EntityTimelineAnalyzer
+        from mnemonic.config import DB_PATH
+        
+        if not Path(DB_PATH).exists():
+            console.print("[red]✗ Database not found. Store some memories first![/red]")
+            return
+        
+        console.print(f"\n💤 [bold]Dormant Entities[/bold] (not mentioned in {days}+ days)\n")
+        
+        analyzer = EntityTimelineAnalyzer(DB_PATH)
+        dormant = analyzer.get_dormant_entities(limit=limit, min_frequency=3)
+        
+        if not dormant:
+            console.print("[yellow]No dormant entities found.[/yellow]")
+            console.print(f"[dim](Need entities with frequency >= 3 not seen in {days}+ days)[/dim]\n")
+            return
+        
+        for i, timeline in enumerate(dormant, 1):
+            console.print(f"{i}. [cyan]{timeline.entity_text}[/cyan] ({timeline.entity_type or 'untyped'})")
+            console.print(f"   Mentioned {timeline.frequency} times")
+            console.print(f"   Last seen: {timeline.days_since_last} days ago")
+            console.print(f"   First mentioned: {timeline.days_since_first} days ago")
+            console.print()
+        
+        console.print(f"[dim]💡 View timeline: [bold]mnemonic entities timeline-show <entity>[/bold][/dim]\n")
+        
+    except Exception as e:
+        console.print(f"[red]✗ Error getting dormant entities: {e}[/red]")
+        import traceback
+        console.print(f"[dim]{traceback.format_exc()}[/dim]")
+
+
+@entities_group.command(name='timeline-show')
+@click.argument('entity_name')
+@click.option('--granularity', '-g', default='month', help='Time granularity (day/week/month/quarter/year)')
+def timeline_show(entity_name, granularity):
+    """Show timeline visualization for an entity"""
+    try:
+        from mnemonic.entity_timeline import EntityTimelineAnalyzer
+        from mnemonic.config import DB_PATH
+        
+        if not Path(DB_PATH).exists():
+            console.print("[red]✗ Database not found. Store some memories first![/red]")
+            return
+        
+        analyzer = EntityTimelineAnalyzer(DB_PATH)
+        
+        # Get and display timeline
+        timeline = analyzer.get_entity_timeline(entity_name)
+        
+        if not timeline:
+            console.print(f"[red]✗ Entity '{entity_name}' not found.[/red]\n")
+            return
+        
+        # Show visualization
+        viz = analyzer.visualize_timeline(entity_name, granularity=granularity)
+        console.print(viz)
+        
+        # Show details
+        emoji = analyzer._trend_emoji(timeline.trend)
+        console.print(f"[bold]Details:[/bold]")
+        console.print(f"  Type: {timeline.entity_type or 'untyped'}")
+        console.print(f"  Trend: {emoji} {timeline.trend}")
+        console.print(f"  Activity Score: {timeline.activity_score}/100")
+        console.print(f"  Total Mentions: {timeline.frequency}")
+        console.print(f"  First Mention: {timeline.days_since_first} days ago")
+        console.print(f"  Last Mention: {timeline.days_since_last} days ago")
+        console.print()
+        
+    except Exception as e:
+        console.print(f"[red]✗ Error showing timeline: {e}[/red]")
+        import traceback
+        console.print(f"[dim]{traceback.format_exc()}[/dim]")
+
+
+@entities_group.command(name='timeline-summary')
+@click.option('--period', '-p', default='month', help='Period (day/week/month/quarter/year)')
+@click.option('--limit', '-n', default=6, help='Number of periods to show')
+def timeline_summary(period, limit):
+    """Show activity summary by time period"""
+    try:
+        from mnemonic.entity_timeline import EntityTimelineAnalyzer
+        from mnemonic.config import DB_PATH
+        
+        if not Path(DB_PATH).exists():
+            console.print("[red]✗ Database not found. Store some memories first![/red]")
+            return
+        
+        console.print(f"\n📊 [bold]Activity Summary by {period.capitalize()}[/bold]\n")
+        
+        analyzer = EntityTimelineAnalyzer(DB_PATH)
+        summary = analyzer.get_activity_summary(period=period, limit=limit)
+        
+        if not summary:
+            console.print("[yellow]No activity data found.[/yellow]\n")
+            return
+        
+        for period_data in summary:
+            console.print(f"[bold cyan]{period_data.period}[/bold cyan]")
+            console.print(f"  Entities: {period_data.entity_count} | Mentions: {period_data.total_mentions}")
+            
+            if period_data.top_entities:
+                top_3 = period_data.top_entities[:3]
+                console.print(f"  Top: ", end="")
+                for i, (entity, count) in enumerate(top_3):
+                    if i > 0:
+                        console.print(", ", end="")
+                    console.print(f"[green]{entity}[/green] ({count})", end="")
+                console.print()
+            
+            console.print()
+        
+    except Exception as e:
+        console.print(f"[red]✗ Error getting activity summary: {e}[/red]")
         import traceback
         console.print(f"[dim]{traceback.format_exc()}[/dim]")
 

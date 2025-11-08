@@ -1,11 +1,12 @@
 """
-Tests for Entity Timeline Analysis (Week 4, Day 3)
+Tests for Entity Timeline Analysis System
 
 Tests:
-- Timeline data retrieval
-- Trend detection (increasing/stable/declining)
-- Rediscovery suggestions
-- ASCII visualization
+- Timeline creation and tracking
+- Trend detection algorithms
+- Activity scoring
+- Dormant entity detection
+- Timeline visualization
 - Activity summaries
 """
 
@@ -13,389 +14,527 @@ import pytest
 import sqlite3
 import tempfile
 import os
-from pathlib import Path
-import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 
+# Add parent directory to path for imports
+import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from mnemonic.entity_timeline import (
     EntityTimelineAnalyzer,
-    EntityTimelineData,
-    RediscoverySuggestion
+    EntityTimeline,
+    ActivityPeriod
 )
 
 
 @pytest.fixture
-def temp_db():
-    """Create temporary database with timeline data"""
-    fd, path = tempfile.mkstemp(suffix=".db")
+def test_db():
+    """Create temporary test database with sample data"""
+    # Create temp database
+    fd, db_path = tempfile.mkstemp(suffix='.db')
     os.close(fd)
     
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     # Create tables
     cursor.execute("""
         CREATE TABLE memories (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             content TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            uuid TEXT UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP
         )
     """)
     
     cursor.execute("""
         CREATE TABLE entities (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             text TEXT NOT NULL,
             type TEXT,
-            type_source TEXT NOT NULL,
-            confidence REAL NOT NULL,
+            type_source TEXT,
+            confidence REAL,
             frequency INTEGER DEFAULT 1,
-            memory_id INTEGER NOT NULL
+            memory_id INTEGER,
+            cluster_id INTEGER,
+            metadata TEXT,
+            last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (memory_id) REFERENCES memories(id)
         )
     """)
     
+    # Insert test data
+    # Entity 1: "Python" - increasing trend (3 months, getting more frequent)
+    base_date = datetime.now()
+    
+    # Month 1: 2 mentions
+    for i in range(2):
+        date = base_date - timedelta(days=90 - i)
+        cursor.execute(
+            "INSERT INTO memories (content, created_at) VALUES (?, ?)",
+            (f"Learning Python basics {i}", date.isoformat())
+        )
+        memory_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO entities (text, type, type_source, confidence, frequency, memory_id) VALUES (?, ?, ?, ?, ?, ?)",
+            ("Python", "technology", "user_defined", 0.9, 5, memory_id)
+        )
+    
+    # Month 2: 3 mentions
+    for i in range(3):
+        date = base_date - timedelta(days=60 - i)
+        cursor.execute(
+            "INSERT INTO memories (content, created_at) VALUES (?, ?)",
+            (f"Python advanced topics {i}", date.isoformat())
+        )
+        memory_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO entities (text, type, type_source, confidence, frequency, memory_id) VALUES (?, ?, ?, ?, ?, ?)",
+            ("Python", "technology", "user_defined", 0.9, 5, memory_id)
+        )
+    
+    # Month 3: 5 mentions (recent - increasing trend)
+    for i in range(5):
+        date = base_date - timedelta(days=10 - i)
+        cursor.execute(
+            "INSERT INTO memories (content, created_at) VALUES (?, ?)",
+            (f"Python project work {i}", date.isoformat())
+        )
+        memory_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO entities (text, type, type_source, confidence, frequency, memory_id) VALUES (?, ?, ?, ?, ?, ?)",
+            ("Python", "technology", "user_defined", 0.9, 10, memory_id)
+        )
+    
+    # Entity 2: "JavaScript" - dormant (mentioned 95 days ago, freq=5)
+    for i in range(5):
+        date = base_date - timedelta(days=95 + i)
+        cursor.execute(
+            "INSERT INTO memories (content, created_at) VALUES (?, ?)",
+            (f"JavaScript tutorial {i}", date.isoformat())
+        )
+        memory_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO entities (text, type, type_source, confidence, frequency, memory_id) VALUES (?, ?, ?, ?, ?, ?)",
+            ("JavaScript", "technology", "user_defined", 0.9, 5, memory_id)
+        )
+    
+    # Entity 3: "React" - burst (5 mentions in last 3 days)
+    for i in range(5):
+        date = base_date - timedelta(days=2 - (i * 0.5))
+        cursor.execute(
+            "INSERT INTO memories (content, created_at) VALUES (?, ?)",
+            (f"React learning {i}", date.isoformat())
+        )
+        memory_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO entities (text, type, type_source, confidence, frequency, memory_id) VALUES (?, ?, ?, ?, ?, ?)",
+            ("React", "technology", "user_defined", 0.9, 5, memory_id)
+        )
+    
+    # Entity 4: "Go" - stable (consistent mentions)
+    for i in range(6):
+        date = base_date - timedelta(days=60 - (i * 10))
+        cursor.execute(
+            "INSERT INTO memories (content, created_at) VALUES (?, ?)",
+            (f"Go programming {i}", date.isoformat())
+        )
+        memory_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO entities (text, type, type_source, confidence, frequency, memory_id) VALUES (?, ?, ?, ?, ?, ?)",
+            ("Go", "technology", "user_defined", 0.9, 6, memory_id)
+        )
+    
     conn.commit()
     conn.close()
     
-    yield path
+    yield db_path
     
-    os.unlink(path)
-
-
-@pytest.fixture
-def populated_timeline_db(temp_db):
-    """Create database with timeline test data"""
-    conn = sqlite3.connect(temp_db)
-    cursor = conn.cursor()
-    
-    # Add memories over time with entities
-    base_date = datetime.now() - timedelta(days=180)
-    
-    test_data = [
-        # "Steins Gate" - increasing trend (more recent mentions)
-        ("Steins Gate", "anime", 0, 2),  # 180 days ago, 2 mentions
-        ("Steins Gate", "anime", 90, 3), # 90 days ago, 3 mentions
-        ("Steins Gate", "anime", 30, 5), # 30 days ago, 5 mentions
-        ("Steins Gate", "anime", 7, 7),  # 7 days ago, 7 mentions
-        
-        # "Code Geass" - declining trend (fewer recent mentions)
-        ("Code Geass", "anime", 0, 8),   # 180 days ago, 8 mentions
-        ("Code Geass", "anime", 90, 5),  # 90 days ago, 5 mentions
-        ("Code Geass", "anime", 150, 2), # 150 days ago, 2 mentions
-        
-        # "Death Note" - stable trend
-        ("Death Note", "anime", 0, 5),
-        ("Death Note", "anime", 60, 5),
-        ("Death Note", "anime", 120, 5),
-        
-        # "Cowboy Bebop" - rediscovery candidate (not mentioned recently)
-        ("Cowboy Bebop", "anime", 0, 10),  # 180 days ago, high frequency
-        ("Cowboy Bebop", "anime", 30, 3),  # 150 days ago
-    ]
-    
-    entity_id_map = {}
-    
-    for entity_text, entity_type, days_ago, mention_count in test_data:
-        date = base_date + timedelta(days=days_ago)
-        
-        # Create memories for this entity at this date
-        for _ in range(mention_count):
-            cursor.execute("""
-                INSERT INTO memories (content, created_at)
-                VALUES (?, ?)
-            """, (f"Memory about {entity_text}", date.isoformat()))
-            
-            memory_id = cursor.lastrowid
-            
-            # Get or create entity
-            entity_key = (entity_text, entity_type)
-            if entity_key not in entity_id_map:
-                cursor.execute("""
-                    INSERT INTO entities (text, type, type_source, confidence, frequency, memory_id)
-                    VALUES (?, ?, 'user_defined', 0.9, ?, ?)
-                """, (entity_text, entity_type, mention_count, memory_id))
-                entity_id_map[entity_key] = cursor.lastrowid
-            else:
-                # Update frequency
-                cursor.execute("""
-                    UPDATE entities
-                    SET frequency = frequency + 1
-                    WHERE id = ?
-                """, (entity_id_map[entity_key],))
-    
-    conn.commit()
-    conn.close()
-    
-    return temp_db
-
-
-class TestEntityTimelineData:
-    """Test EntityTimelineData dataclass"""
-    
-    def test_timeline_data_creation(self):
-        """Test creating timeline data"""
-        timeline = EntityTimelineData(
-            entity_id=1,
-            text="Test Entity",
-            type="test",
-            first_mention="2024-01-01",
-            last_mention="2024-06-01",
-            total_frequency=10,
-            days_active=152,
-            mentions_by_date={"2024-01-01": 5, "2024-06-01": 5},
-            trend="increasing",
-            trend_direction="↗",
-            days_since_last=30
-        )
-        
-        assert timeline.text == "Test Entity"
-        assert timeline.trend == "increasing"
-        assert timeline.days_active == 152
-    
-    def test_timeline_to_dict(self):
-        """Test converting timeline to dictionary"""
-        timeline = EntityTimelineData(
-            entity_id=1,
-            text="Test",
-            type="test",
-            first_mention="2024-01-01",
-            last_mention="2024-06-01",
-            total_frequency=10,
-            days_active=152,
-            mentions_by_date={},
-            trend="stable",
-            trend_direction="→",
-            days_since_last=30
-        )
-        
-        data = timeline.to_dict()
-        
-        assert data['text'] == "Test"
-        assert data['trend'] == "stable"
-        assert 'entity_id' in data
+    # Cleanup
+    os.unlink(db_path)
 
 
 class TestEntityTimelineAnalyzer:
-    """Test EntityTimelineAnalyzer class"""
+    """Test suite for EntityTimelineAnalyzer"""
     
-    def test_analyzer_initialization(self, temp_db):
+    def test_initialization(self, test_db):
         """Test analyzer initialization"""
-        analyzer = EntityTimelineAnalyzer(temp_db)
-        assert analyzer.db_path == temp_db
+        analyzer = EntityTimelineAnalyzer(test_db)
+        assert analyzer.db_path == test_db
     
-    def test_get_entity_timeline(self, populated_timeline_db):
+    def test_get_entity_timeline(self, test_db):
         """Test getting timeline for specific entity"""
-        analyzer = EntityTimelineAnalyzer(populated_timeline_db)
+        analyzer = EntityTimelineAnalyzer(test_db)
         
-        timeline = analyzer.get_entity_timeline("Steins Gate", "anime")
+        # Get Python timeline
+        timeline = analyzer.get_entity_timeline("Python")
         
         assert timeline is not None
-        assert timeline.text == "Steins Gate"
-        assert timeline.type == "anime"
-        assert timeline.total_frequency > 0
-        assert len(timeline.mentions_by_date) > 0
+        assert timeline.entity_text == "Python"
+        assert timeline.entity_type == "technology"
+        assert timeline.frequency >= 5  # At least 5 mentions
+        assert timeline.first_mention is not None
+        assert timeline.last_mention is not None
+        assert timeline.days_since_last < 15  # Recent mention
+        assert 0 <= timeline.activity_score <= 100
     
-    def test_get_timeline_not_found(self, temp_db):
-        """Test getting timeline for non-existent entity"""
-        analyzer = EntityTimelineAnalyzer(temp_db)
+    def test_trend_detection_increasing(self, test_db):
+        """Test detection of increasing trend"""
+        analyzer = EntityTimelineAnalyzer(test_db)
         
-        timeline = analyzer.get_entity_timeline("NonExistent")
+        timeline = analyzer.get_entity_timeline("Python")
+        
+        # Python should show increasing trend (2 → 3 → 5 mentions)
+        assert timeline.trend == "increasing"
+    
+    def test_trend_detection_dormant(self, test_db):
+        """Test detection of dormant entities"""
+        analyzer = EntityTimelineAnalyzer(test_db)
+        
+        timeline = analyzer.get_entity_timeline("JavaScript")
+        
+        # JavaScript should be dormant (95+ days)
+        assert timeline.trend == "dormant"
+        assert timeline.days_since_last >= 90
+    
+    def test_trend_detection_burst(self, test_db):
+        """Test detection of burst activity"""
+        analyzer = EntityTimelineAnalyzer(test_db)
+        
+        timeline = analyzer.get_entity_timeline("React")
+        
+        # React should show burst (5 mentions in 3 days)
+        assert timeline.trend == "burst"
+    
+    def test_trend_detection_stable(self, test_db):
+        """Test detection of stable trend"""
+        analyzer = EntityTimelineAnalyzer(test_db)
+        
+        timeline = analyzer.get_entity_timeline("Go")
+        
+        # Go should be stable (consistent mentions)
+        assert timeline.trend == "stable"
+    
+    def test_activity_score_calculation(self, test_db):
+        """Test activity score calculation"""
+        analyzer = EntityTimelineAnalyzer(test_db)
+        
+        # Recent, frequent entity should have high score
+        python_timeline = analyzer.get_entity_timeline("Python")
+        assert python_timeline.activity_score > 50
+        
+        # Dormant entity should have low score
+        js_timeline = analyzer.get_entity_timeline("JavaScript")
+        assert js_timeline.activity_score < 30
+    
+    def test_activity_score_recency_weight(self, test_db):
+        """Test that recency is weighted properly in activity score"""
+        analyzer = EntityTimelineAnalyzer(test_db)
+        
+        # React (recent burst) should score higher than JavaScript (dormant)
+        react_timeline = analyzer.get_entity_timeline("React")
+        js_timeline = analyzer.get_entity_timeline("JavaScript")
+        
+        assert react_timeline.activity_score > js_timeline.activity_score
+    
+    def test_mentions_by_period(self, test_db):
+        """Test grouping mentions by time period"""
+        analyzer = EntityTimelineAnalyzer(test_db)
+        
+        timeline = analyzer.get_entity_timeline("Python")
+        
+        # Should have mentions grouped by month
+        assert len(timeline.mentions_by_period) > 0
+        
+        # Each period should have counts
+        for period, count in timeline.mentions_by_period.items():
+            assert isinstance(period, str)
+            assert count > 0
+    
+    def test_get_trending_entities(self, test_db):
+        """Test getting trending entities"""
+        analyzer = EntityTimelineAnalyzer(test_db)
+        
+        trending = analyzer.get_trending_entities(limit=3)
+        
+        assert len(trending) <= 3
+        assert all(isinstance(t, EntityTimeline) for t in trending)
+        
+        # Should be sorted by activity score
+        if len(trending) > 1:
+            for i in range(len(trending) - 1):
+                assert trending[i].activity_score >= trending[i+1].activity_score
+    
+    def test_get_trending_entities_filter(self, test_db):
+        """Test filtering trending entities by trend type"""
+        analyzer = EntityTimelineAnalyzer(test_db)
+        
+        # Get only burst entities
+        burst_entities = analyzer.get_trending_entities(limit=10, trend_type="burst")
+        
+        assert all(t.trend == "burst" for t in burst_entities)
+    
+    def test_get_dormant_entities(self, test_db):
+        """Test getting dormant entities"""
+        analyzer = EntityTimelineAnalyzer(test_db)
+        
+        dormant = analyzer.get_dormant_entities(limit=5, min_frequency=3)
+        
+        # JavaScript should be in dormant list
+        dormant_texts = [t.entity_text for t in dormant]
+        assert "JavaScript" in dormant_texts
+        
+        # All should be dormant
+        assert all(t.trend == "dormant" for t in dormant)
+        assert all(t.days_since_last >= 90 for t in dormant)
+    
+    def test_visualize_timeline(self, test_db):
+        """Test ASCII timeline visualization"""
+        analyzer = EntityTimelineAnalyzer(test_db)
+        
+        viz = analyzer.visualize_timeline("Python", granularity='month')
+        
+        # Should be a non-empty string
+        assert isinstance(viz, str)
+        assert len(viz) > 0
+        
+        # Should contain entity name and trend info
+        assert "Python" in viz
+        assert "Trend:" in viz
+        assert "Activity Score:" in viz
+    
+    def test_visualize_timeline_not_found(self, test_db):
+        """Test visualization for non-existent entity"""
+        analyzer = EntityTimelineAnalyzer(test_db)
+        
+        viz = analyzer.visualize_timeline("NonExistent")
+        
+        assert "No timeline data" in viz
+    
+    def test_get_activity_summary(self, test_db):
+        """Test activity summary by period"""
+        analyzer = EntityTimelineAnalyzer(test_db)
+        
+        summary = analyzer.get_activity_summary(period='month', limit=3)
+        
+        assert len(summary) <= 3
+        assert all(isinstance(p, ActivityPeriod) for p in summary)
+        
+        # Each period should have data
+        for period_data in summary:
+            assert period_data.entity_count > 0
+            assert period_data.total_mentions > 0
+            assert len(period_data.top_entities) > 0
+    
+    def test_get_activity_summary_granularities(self, test_db):
+        """Test different time granularities"""
+        analyzer = EntityTimelineAnalyzer(test_db)
+        
+        granularities = ['day', 'week', 'month', 'quarter', 'year']
+        
+        for granularity in granularities:
+            summary = analyzer.get_activity_summary(period=granularity, limit=5)
+            
+            # Should return results for each granularity
+            assert len(summary) > 0
+            
+            # Period format should match granularity
+            period_format = summary[0].period
+            if granularity == 'week':
+                assert '-W' in period_format
+            elif granularity == 'quarter':
+                assert '-Q' in period_format
+    
+    def test_get_timeline_stats(self, test_db):
+        """Test overall timeline statistics"""
+        analyzer = EntityTimelineAnalyzer(test_db)
+        
+        stats = analyzer.get_timeline_stats()
+        
+        assert 'total_entities_with_timeline' in stats
+        assert 'trend_distribution' in stats
+        assert 'avg_activity_score' in stats
+        
+        # Should have counted entities
+        assert stats['total_entities_with_timeline'] > 0
+        
+        # Should have trend distribution
+        trend_dist = stats['trend_distribution']
+        assert isinstance(trend_dist, dict)
+        assert all(k in trend_dist for k in ['increasing', 'stable', 'declining', 'burst', 'dormant'])
+    
+    def test_trend_emoji(self, test_db):
+        """Test trend emoji mapping"""
+        analyzer = EntityTimelineAnalyzer(test_db)
+        
+        assert analyzer._trend_emoji('increasing') == '↗'
+        assert analyzer._trend_emoji('stable') == '→'
+        assert analyzer._trend_emoji('declining') == '↘'
+        assert analyzer._trend_emoji('burst') == '🔥'
+        assert analyzer._trend_emoji('dormant') == '💤'
+    
+    def test_entity_not_found(self, test_db):
+        """Test handling of non-existent entity"""
+        analyzer = EntityTimelineAnalyzer(test_db)
+        
+        timeline = analyzer.get_entity_timeline("NonExistentEntity")
         
         assert timeline is None
     
-    def test_trend_detection_increasing(self, populated_timeline_db):
-        """Test detecting increasing trend"""
-        analyzer = EntityTimelineAnalyzer(populated_timeline_db)
+    def test_timeline_with_type_filter(self, test_db):
+        """Test timeline retrieval with entity type filter"""
+        analyzer = EntityTimelineAnalyzer(test_db)
         
-        timeline = analyzer.get_entity_timeline("Steins Gate", "anime")
-        
-        assert timeline is not None
-        # Steins Gate has increasing mentions over time
-        assert timeline.trend in ["increasing", "stable"]  # May vary based on data distribution
-        
-    def test_trend_detection_declining(self, populated_timeline_db):
-        """Test detecting declining trend"""
-        analyzer = EntityTimelineAnalyzer(populated_timeline_db)
-        
-        timeline = analyzer.get_entity_timeline("Code Geass", "anime")
+        # Get Python with type filter
+        timeline = analyzer.get_entity_timeline("Python", entity_type="technology")
         
         assert timeline is not None
-        # Code Geass has declining mentions
-        assert timeline.trend in ["declining", "stable"]
-    
-    def test_trend_detection_stable(self, populated_timeline_db):
-        """Test detecting stable trend"""
-        analyzer = EntityTimelineAnalyzer(populated_timeline_db)
+        assert timeline.entity_type == "technology"
         
-        timeline = analyzer.get_entity_timeline("Death Note", "anime")
-        
-        assert timeline is not None
-        # Death Note has stable mentions
-        assert timeline.trend == "stable"
+        # Wrong type should return None
+        timeline_wrong = analyzer.get_entity_timeline("Python", entity_type="wrong_type")
+        assert timeline_wrong is None
 
 
-class TestTrendingEntities:
-    """Test trending entities functionality"""
+class TestTimelinePeriodGrouping:
+    """Test period grouping functionality"""
     
-    def test_get_trending_entities(self, populated_timeline_db):
-        """Test getting trending entities"""
-        analyzer = EntityTimelineAnalyzer(populated_timeline_db)
+    def test_group_by_day(self, test_db):
+        """Test grouping by day"""
+        analyzer = EntityTimelineAnalyzer(test_db)
         
-        trending = analyzer.get_trending_entities(limit=10)
+        timeline = analyzer.get_entity_timeline("Python")
         
-        assert len(trending) > 0
-        assert all(isinstance(t, EntityTimelineData) for t in trending)
+        # Create timeline with day granularity
+        conn = sqlite3.connect(test_db)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT m.created_at 
+            FROM entities e
+            JOIN memories m ON e.memory_id = m.id
+            WHERE LOWER(e.text) = LOWER('Python')
+        """)
+        
+        timestamps = [datetime.fromisoformat(row[0]) for row in cursor.fetchall()]
+        conn.close()
+        
+        daily_counts = analyzer._group_by_period(timestamps, 'day')
+        
+        # Should have daily breakdown
+        assert len(daily_counts) > 0
+        
+        # Keys should be in YYYY-MM-DD format
+        for period in daily_counts.keys():
+            assert len(period.split('-')) == 3
     
-    def test_filter_by_entity_type(self, populated_timeline_db):
-        """Test filtering trending by entity type"""
-        analyzer = EntityTimelineAnalyzer(populated_timeline_db)
+    def test_group_by_week(self, test_db):
+        """Test grouping by week"""
+        analyzer = EntityTimelineAnalyzer(test_db)
         
-        trending = analyzer.get_trending_entities(entity_type="anime", limit=10)
+        timeline = analyzer.get_entity_timeline("Python")
         
-        assert len(trending) > 0
-        assert all(t.type == "anime" for t in trending)
+        conn = sqlite3.connect(test_db)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT m.created_at 
+            FROM entities e
+            JOIN memories m ON e.memory_id = m.id
+            WHERE LOWER(e.text) = LOWER('Python')
+        """)
+        
+        timestamps = [datetime.fromisoformat(row[0]) for row in cursor.fetchall()]
+        conn.close()
+        
+        weekly_counts = analyzer._group_by_period(timestamps, 'week')
+        
+        # Keys should be in YYYY-WXX format
+        for period in weekly_counts.keys():
+            assert '-W' in period
     
-    def test_filter_by_trend(self, populated_timeline_db):
-        """Test filtering by trend type"""
-        analyzer = EntityTimelineAnalyzer(populated_timeline_db)
+    def test_group_by_quarter(self, test_db):
+        """Test grouping by quarter"""
+        analyzer = EntityTimelineAnalyzer(test_db)
         
-        increasing = analyzer.get_trending_entities(trend_filter="increasing", limit=10)
+        timeline = analyzer.get_entity_timeline("Python")
         
-        # All results should have increasing trend
-        assert all(t.trend == "increasing" for t in increasing)
+        conn = sqlite3.connect(test_db)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT m.created_at 
+            FROM entities e
+            JOIN memories m ON e.memory_id = m.id
+            WHERE LOWER(e.text) = LOWER('Python')
+        """)
+        
+        timestamps = [datetime.fromisoformat(row[0]) for row in cursor.fetchall()]
+        conn.close()
+        
+        quarterly_counts = analyzer._group_by_period(timestamps, 'quarter')
+        
+        # Keys should be in YYYY-QX format
+        for period in quarterly_counts.keys():
+            assert '-Q' in period
 
 
-class TestRediscovery:
-    """Test rediscovery suggestions"""
+class TestActivityScoring:
+    """Test activity scoring algorithms"""
     
-    def test_get_rediscovery_suggestions(self, populated_timeline_db):
-        """Test getting rediscovery suggestions"""
-        analyzer = EntityTimelineAnalyzer(populated_timeline_db)
+    def test_recency_decay(self, test_db):
+        """Test that recency decays over time"""
+        analyzer = EntityTimelineAnalyzer(test_db)
         
-        suggestions = analyzer.get_rediscovery_suggestions(
-            min_days_ago=100,
-            min_frequency=5,
-            limit=5
+        # Same frequency, different recency
+        recent_score = analyzer._calculate_activity_score(
+            frequency=5,
+            days_since_last=1,
+            days_since_first=30
         )
         
-        # Should find some suggestions
-        assert isinstance(suggestions, list)
-        assert all(isinstance(s, RediscoverySuggestion) for s in suggestions)
-    
-    def test_rediscovery_relevance_score(self, populated_timeline_db):
-        """Test that relevance scores are calculated"""
-        analyzer = EntityTimelineAnalyzer(populated_timeline_db)
-        
-        suggestions = analyzer.get_rediscovery_suggestions(
-            min_days_ago=100,
-            min_frequency=3,
-            limit=5
+        old_score = analyzer._calculate_activity_score(
+            frequency=5,
+            days_since_last=60,
+            days_since_first=90
         )
         
-        for sug in suggestions:
-            assert 0 <= sug.relevance_score <= 1
-            assert sug.days_ago >= 100
-            assert sug.frequency >= 3
+        # Recent should score higher
+        assert recent_score > old_score
     
-    def test_rediscovery_sorting(self, populated_timeline_db):
-        """Test that suggestions are sorted by relevance"""
-        analyzer = EntityTimelineAnalyzer(populated_timeline_db)
+    def test_frequency_matters(self, test_db):
+        """Test that frequency affects score"""
+        analyzer = EntityTimelineAnalyzer(test_db)
         
-        suggestions = analyzer.get_rediscovery_suggestions(limit=10)
+        # Same recency, different frequency
+        high_freq_score = analyzer._calculate_activity_score(
+            frequency=20,
+            days_since_last=5,
+            days_since_first=30
+        )
         
-        if len(suggestions) > 1:
-            # Should be sorted descending by relevance
-            for i in range(len(suggestions) - 1):
-                assert suggestions[i].relevance_score >= suggestions[i + 1].relevance_score
-
-
-class TestVisualization:
-    """Test ASCII visualization"""
+        low_freq_score = analyzer._calculate_activity_score(
+            frequency=3,
+            days_since_last=5,
+            days_since_first=30
+        )
+        
+        # Higher frequency should score higher
+        assert high_freq_score > low_freq_score
     
-    def test_visualize_timeline(self, populated_timeline_db):
-        """Test ASCII timeline generation"""
-        analyzer = EntityTimelineAnalyzer(populated_timeline_db)
+    def test_score_bounds(self, test_db):
+        """Test that scores stay within 0-100 range"""
+        analyzer = EntityTimelineAnalyzer(test_db)
         
-        ascii_chart = analyzer.visualize_timeline_ascii("Steins Gate", "anime")
+        # Extreme values
+        scores = [
+            analyzer._calculate_activity_score(100, 0, 1),  # Max
+            analyzer._calculate_activity_score(1, 365, 365),  # Min
+            analyzer._calculate_activity_score(50, 30, 60),  # Mid
+        ]
         
-        assert isinstance(ascii_chart, str)
-        assert "Steins Gate" in ascii_chart
-        assert "Timeline for:" in ascii_chart
-        assert "Trend:" in ascii_chart
-    
-    def test_visualize_not_found(self, temp_db):
-        """Test visualization for non-existent entity"""
-        analyzer = EntityTimelineAnalyzer(temp_db)
-        
-        result = analyzer.visualize_timeline_ascii("NonExistent")
-        
-        assert "not found" in result.lower()
-
-
-class TestActivitySummary:
-    """Test activity summary functionality"""
-    
-    def test_get_activity_summary(self, populated_timeline_db):
-        """Test getting activity summary"""
-        analyzer = EntityTimelineAnalyzer(populated_timeline_db)
-        
-        summary = analyzer.get_activity_summary("Steins Gate", "anime")
-        
-        assert 'entity' in summary
-        assert 'total_mentions' in summary
-        assert 'trend' in summary
-        assert 'days_active' in summary
-        assert summary['entity'] == "Steins Gate"
-    
-    def test_activity_summary_not_found(self, temp_db):
-        """Test activity summary for non-existent entity"""
-        analyzer = EntityTimelineAnalyzer(temp_db)
-        
-        summary = analyzer.get_activity_summary("NonExistent")
-        
-        assert summary == {}
-    
-    def test_most_active_period(self, populated_timeline_db):
-        """Test detection of most active period"""
-        analyzer = EntityTimelineAnalyzer(populated_timeline_db)
-        
-        summary = analyzer.get_activity_summary("Steins Gate", "anime")
-        
-        assert 'most_active_month' in summary
-        assert 'most_active_month_mentions' in summary
-
-
-class TestTimelineStats:
-    """Test overall timeline statistics"""
-    
-    def test_get_timeline_stats(self, populated_timeline_db):
-        """Test getting timeline statistics"""
-        analyzer = EntityTimelineAnalyzer(populated_timeline_db)
-        
-        stats = analyzer.get_timeline_stats()
-        
-        assert 'total_entities' in stats
-        assert 'data_start' in stats
-        assert 'data_end' in stats
-        assert 'total_days' in stats
-        assert stats['total_entities'] > 0
-    
-    def test_stats_empty_database(self, temp_db):
-        """Test stats on empty database"""
-        analyzer = EntityTimelineAnalyzer(temp_db)
-        
-        stats = analyzer.get_timeline_stats()
-        
-        assert stats['total_entities'] == 0
-        assert stats['total_days'] == 0
-
-
-def run_tests():
-    """Run all tests"""
-    pytest.main([__file__, "-v"])
+        for score in scores:
+            assert 0 <= score <= 100
 
 
 if __name__ == "__main__":
-    run_tests()
+    pytest.main([__file__, "-v"])

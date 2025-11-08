@@ -163,6 +163,7 @@ class ReextractionWorker:
             
             if total_memories == 0:
                 self._log("No memories to process")
+                queue.update_progress(job_id, memories_processed, entities_found)
                 queue.complete_job(job_id, entities_found=0)
                 return True
             
@@ -217,6 +218,7 @@ class ReextractionWorker:
                     continue
             
             # Complete job
+            queue.update_progress(job_id, total_memories, entities_found)
             queue.complete_job(job_id, entities_found=entities_found)
             
             self._log(f"Job completed: {entities_found} entities found in {memories_processed} memories")

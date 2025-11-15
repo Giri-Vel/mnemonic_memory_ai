@@ -25,6 +25,9 @@ dependencies = [
     "rich>=13.7.0",
     "sentence-transformers>=2.0.0", 
     "diskcache>=5.0.0", 
+    "gliner>=0.2.0",
+    "spacy>=3.7.0",
+    "torch>=2.0.0",
 ]
 
 [project.optional-dependencies]

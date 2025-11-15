@@ -3,7 +3,6 @@
 **Project:** Personal AI Memory System  
 **Timeline:** October 2024 - April 2025  
 **Goal:** Build a production-grade memory system + land 250k USD remote job  
-**Deadline:** June 2025 (wedding)
 
 ---
 

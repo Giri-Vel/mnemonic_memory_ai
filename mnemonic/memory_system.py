@@ -1015,21 +1015,21 @@ class MemorySystem:
             
             # Get memory IDs from session_memories join table
             cursor.execute("""
-                SELECT memory_id, sequence_number
-                FROM session_memories 
-                WHERE session_id = ?
-                ORDER BY sequence_number ASC
+                SELECT m.uuid, sm.sequence_number
+                FROM session_memories sm
+                JOIN memories m ON m.id = sm.memory_id
+                WHERE sm.session_id = ?
+                ORDER BY sm.sequence_number ASC
             """, (full_session_id,))
-            
+
             memory_rows = cursor.fetchall()
-            
+
             # Load actual memory data using self.get() method
             memories = []
             if memory_rows:
                 for row in memory_rows:
-                    mem_id = str(row['memory_id'])
-                    # Use the existing get() method to fetch the memory
-                    mem = self.get(mem_id)
+                    mem_uuid = row['uuid']  # ← Changed from memory_id to uuid
+                    mem = self.get(mem_uuid)
                     if mem:
                         memories.append({
                             'id': mem.id,
@@ -1054,6 +1054,143 @@ class MemorySystem:
                 'entity_highlights': entity_highlights,
                 'memory_count': len(memories),
                 'memories': memories
+            }
+            
+        finally:
+            conn.close()
+
+    def get_context_for_timeframe(
+        self,
+        hours: Optional[int] = None,
+        days: Optional[int] = None,
+        include_summaries: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Get conversation context for a specific timeframe.
+        
+        Retrieves all memories from sessions within the specified time window,
+        organized by session with optional summaries for context.
+        
+        Args:
+            hours: Look back this many hours (default: None)
+            days: Look back this many days (default: None)
+            include_summaries: Include session summaries (default: True)
+            
+        Returns:
+            Dictionary with:
+            - timeframe: Description of the time window
+            - sessions: List of sessions with their memories
+            - total_memories: Total count of memories
+            - total_sessions: Total count of sessions
+            
+        Examples:
+            # Last 24 hours
+            context = ms.get_context_for_timeframe(hours=24)
+            
+            # Last week
+            context = ms.get_context_for_timeframe(days=7)
+        """
+        import sqlite3
+        import json
+        
+        # Calculate time threshold
+        if hours is None and days is None:
+            hours = 24  # Default to last 24 hours
+        
+        if hours:
+            time_threshold = datetime.now() - timedelta(hours=hours)
+            timeframe_desc = f"last {hours} hour{'s' if hours != 1 else ''}"
+        else:
+            time_threshold = datetime.now() - timedelta(days=days)
+            timeframe_desc = f"last {days} day{'s' if days != 1 else ''}"
+        
+        threshold_iso = time_threshold.isoformat()
+        
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        try:
+            # Find sessions that overlap with the timeframe
+            # A session overlaps if: start_time <= now AND (end_time >= threshold OR end_time IS NULL)
+            cursor.execute("""
+                SELECT 
+                    s.id,
+                    s.start_time,
+                    s.end_time,
+                    s.summary,
+                    s.is_active,
+                    s.metadata
+                FROM sessions s
+                WHERE s.start_time <= datetime('now')
+                  AND (s.end_time >= ? OR s.end_time IS NULL)
+                ORDER BY s.start_time ASC
+            """, (threshold_iso,))
+            
+            session_rows = cursor.fetchall()
+            
+            sessions = []
+            total_memories = 0
+            
+            for session_row in session_rows:
+                session_id = session_row['id']
+                
+                # Get memories for this session that fall within timeframe
+                cursor.execute("""
+                    SELECT m.uuid, m.content, m.created_at, sm.sequence_number
+                    FROM session_memories sm
+                    JOIN memories m ON m.id = sm.memory_id
+                    WHERE sm.session_id = ?
+                      AND m.created_at >= ?
+                    ORDER BY sm.sequence_number ASC
+                """, (session_id, threshold_iso))
+                
+                memory_rows = cursor.fetchall()
+                
+                if not memory_rows:
+                    continue  # Skip sessions with no memories in timeframe
+                
+                memories = []
+                for mem_row in memory_rows:
+                    memories.append({
+                        'id': mem_row['uuid'],
+                        'content': mem_row['content'],
+                        'timestamp': mem_row['created_at'],
+                        'sequence': mem_row['sequence_number']
+                    })
+                
+                total_memories += len(memories)
+                
+                session_data = {
+                    'id': session_row['id'],
+                    'start_time': session_row['start_time'],
+                    'end_time': session_row['end_time'],
+                    'is_active': bool(session_row['is_active']),
+                    'memory_count': len(memories),
+                    'memories': memories
+                }
+                
+                # Add summary if requested
+                if include_summaries and session_row['summary']:
+                    session_data['summary'] = session_row['summary']
+                
+                # Add entity highlights if available
+                if session_row['metadata']:
+                    try:
+                        metadata = json.loads(session_row['metadata'])
+                        if 'entity_highlights' in metadata:
+                            session_data['entity_highlights'] = metadata['entity_highlights']
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                
+                sessions.append(session_data)
+            
+            return {
+                'timeframe': timeframe_desc,
+                'time_threshold': threshold_iso,
+                'sessions': sessions,
+                'total_sessions': len(sessions),
+                'total_memories': total_memories
             }
             
         finally:

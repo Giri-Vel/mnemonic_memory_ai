@@ -542,5 +542,23 @@
       "timestamp": "2025-11-22T20:44:22.151597"
     },
     "timestamp": "2025-11-22T20:44:22.151597"
+  },
+  "c197321d-354f-4972-95d3-fbba65bb7907": {
+    "id": "c197321d-354f-4972-95d3-fbba65bb7907",
+    "content": "Testing session memory - first message about machine learning",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-23T07:06:20.547801"
+    },
+    "timestamp": "2025-11-23T07:06:20.547801"
+  },
+  "96f6cafc-4dfb-4246-8beb-421d853ee172": {
+    "id": "96f6cafc-4dfb-4246-8beb-421d853ee172",
+    "content": "Testing session memory - second message also about ML and neural networks",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-23T07:06:44.519204"
+    },
+    "timestamp": "2025-11-23T07:06:44.519204"
   }
 }

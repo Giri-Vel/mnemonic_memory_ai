@@ -398,5 +398,149 @@
       "timestamp": "2025-11-08T23:39:19.032873"
     },
     "timestamp": "2025-11-08T23:39:19.032873"
+  },
+  "d9b31031-ae55-4774-83f9-dad363f78728": {
+    "id": "d9b31031-ae55-4774-83f9-dad363f78728",
+    "content": "I'm working on the Mnemonic project today",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-22T17:00:41.758258"
+    },
+    "timestamp": "2025-11-22T17:00:41.758258"
+  },
+  "fe3c458e-9ef8-4aa2-8ad7-a81ff552cc56": {
+    "id": "fe3c458e-9ef8-4aa2-8ad7-a81ff552cc56",
+    "content": "Just finished adding session support to the memory system",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-22T17:00:59.637576"
+    },
+    "timestamp": "2025-11-22T17:00:59.637576"
+  },
+  "913cfcf1-481e-4823-82c4-2b5ca7bb1f4e": {
+    "id": "913cfcf1-481e-4823-82c4-2b5ca7bb1f4e",
+    "content": "I'm working on the Mnemonic project today again",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-22T17:02:39.673490"
+    },
+    "timestamp": "2025-11-22T17:02:39.673490"
+  },
+  "8fe2fe0f-70d8-442d-b5e0-bab989774deb": {
+    "id": "8fe2fe0f-70d8-442d-b5e0-bab989774deb",
+    "content": "Just finished adding session support to the memory system again",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-22T17:02:55.615664"
+    },
+    "timestamp": "2025-11-22T17:02:55.615664"
+  },
+  "cf919e0c-5097-4ac2-a2dc-a7f585eafc95": {
+    "id": "cf919e0c-5097-4ac2-a2dc-a7f585eafc95",
+    "content": "Working on Mnemonic project session integration",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-22T19:37:53.989513"
+    },
+    "timestamp": "2025-11-22T19:37:53.989513"
+  },
+  "b6d18f38-f444-4b73-8147-cc4981efbc4b": {
+    "id": "b6d18f38-f444-4b73-8147-cc4981efbc4b",
+    "content": "Testing Claude API for continuity checks",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-22T19:38:11.352149"
+    },
+    "timestamp": "2025-11-22T19:38:11.352149"
+  },
+  "9429165a-fc48-4351-820d-68be1657f2d2": {
+    "id": "9429165a-fc48-4351-820d-68be1657f2d2",
+    "content": "This should be in the same session",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-22T19:38:25.701815"
+    },
+    "timestamp": "2025-11-22T19:38:25.701815"
+  },
+  "b6a7f0ee-03ee-4720-bf2f-4368cf06ddd2": {
+    "id": "b6a7f0ee-03ee-4720-bf2f-4368cf06ddd2",
+    "content": "I need to buy groceries - milk, eggs, bread",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-22T19:40:02.699437"
+    },
+    "timestamp": "2025-11-22T19:40:02.699437"
+  },
+  "a2c67dd3-535a-4d9b-a8b8-6d52fe284164": {
+    "id": "a2c67dd3-535a-4d9b-a8b8-6d52fe284164",
+    "content": "I need to buy groceries - milk, eggs, bread",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-22T19:43:59.686778"
+    },
+    "timestamp": "2025-11-22T19:43:59.686778"
+  },
+  "fef1d011-243f-4ec9-b0d5-5f0f822aa76e": {
+    "id": "fef1d011-243f-4ec9-b0d5-5f0f822aa76e",
+    "content": "Watched a great movie last night - Inception",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-22T19:44:55.201715"
+    },
+    "timestamp": "2025-11-22T19:44:55.201715"
+  },
+  "5e45f38d-835e-4d09-9411-f1d6696e6eae": {
+    "id": "5e45f38d-835e-4d09-9411-f1d6696e6eae",
+    "content": "Watched a great movie last night - Inception",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-22T19:50:29.360509"
+    },
+    "timestamp": "2025-11-22T19:50:29.360509"
+  },
+  "5071b7c0-8013-4752-81f6-8fdd2c48379a": {
+    "id": "5071b7c0-8013-4752-81f6-8fdd2c48379a",
+    "content": "This is my first test memory for sessions",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-22T20:39:18.523794"
+    },
+    "timestamp": "2025-11-22T20:39:18.523794"
+  },
+  "14305719-d387-4bbb-86a0-8455cd5ac552": {
+    "id": "14305719-d387-4bbb-86a0-8455cd5ac552",
+    "content": "This is my second test memory",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-22T20:39:31.433110"
+    },
+    "timestamp": "2025-11-22T20:39:31.433110"
+  },
+  "0e1b969b-1c17-4f5c-82c1-cb805530f58b": {
+    "id": "0e1b969b-1c17-4f5c-82c1-cb805530f58b",
+    "content": "Third memory to test the session system",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-22T20:39:46.843078"
+    },
+    "timestamp": "2025-11-22T20:39:46.843078"
+  },
+  "0caabd7a-1d4f-4044-973f-3438b5676665": {
+    "id": "0caabd7a-1d4f-4044-973f-3438b5676665",
+    "content": "Testing session one",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-22T20:44:11.598977"
+    },
+    "timestamp": "2025-11-22T20:44:11.598977"
+  },
+  "0ff0ac6d-43c3-4b53-80a1-3f5a1845340e": {
+    "id": "0ff0ac6d-43c3-4b53-80a1-3f5a1845340e",
+    "content": "Testing session two",
+    "tags": [],
+    "metadata": {
+      "timestamp": "2025-11-22T20:44:22.151597"
+    },
+    "timestamp": "2025-11-22T20:44:22.151597"
   }
 }

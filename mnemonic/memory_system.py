@@ -13,14 +13,17 @@ import uuid
 import sqlite3
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
+import os
 
 from mnemonic.vector_store import VectorStore
 from mnemonic.config import DB_PATH
 from mnemonic.entity_extractor import EntityExtractor
 from mnemonic.entity_storage import EntityStorage
 from mnemonic.checkpointing import CheckpointManager
+from mnemonic.sessions import SessionStore
+from mnemonic.llm_providers import get_provider, DummyProvider
 
 
 logger = logging.getLogger(__name__)
@@ -115,6 +118,18 @@ class MemorySystem:
             self.entity_extractor = None
             self.entity_storage = None
             self.checkpoint_manager = None
+
+        # Session management
+        self.session_store = SessionStore(self.db_path)
+        
+        # Use DummyProvider (no API needed) until Gemini quota available
+        try:
+            provider = os.getenv("LLM_PROVIDER", "dummy")
+            self.llm_provider = get_provider(provider)
+        except:
+            self.llm_provider = DummyProvider(always_continue=False)
+        
+        self.session_time_gap = timedelta(hours=2)
     
     def _load_memories(self) -> None:
         """Load memories from JSON storage."""
@@ -385,6 +400,9 @@ class MemorySystem:
                     # Non-critical - log but don't fail
                     logger.warning(f"Checkpoint creation failed: {e}")
             
+            # 6. Determine session for this memory
+            session_id = self._determine_session(content, sqlite_id)
+            
             logger.info(f"Added memory {memory.id} to all storage systems")
             return memory
             
@@ -416,6 +434,78 @@ class MemorySystem:
             
             # Re-raise the original exception
             raise
+
+    
+    def _determine_session(self, content: str, sqlite_id: int) -> Optional[str]:
+        """
+        Assign memory to session using 2-hour gap + LLM check.
+        
+        Args:
+            content: Memory content
+            sqlite_id: SQLite ID of the memory
+            
+        Returns:
+            Session ID assigned to this memory
+        """
+        # Get active session
+        active_session = self.session_store.get_active_session()
+        
+        if not active_session:
+            # No active session - create new one
+            session = self.session_store.create_session()
+            self.session_store.add_memory_to_session(session.id, sqlite_id, sequence_number=1)
+            logger.info(f"Created new session: {session.id}")
+            return session.id
+        
+        # Check time gap
+        last_memories = self.session_store.get_session_memories(active_session.id, limit=3)
+        if not last_memories:
+            # Empty session, add to it
+            self.session_store.add_memory_to_session(active_session.id, sqlite_id, sequence_number=1)
+            return active_session.id
+        
+        last_memory_time = datetime.fromisoformat(last_memories[-1]["created_at"])
+        time_gap = datetime.now() - last_memory_time
+        
+        if time_gap < self.session_time_gap:
+            # Within 2 hours - add to current session
+            seq = len(last_memories) + 1
+            self.session_store.add_memory_to_session(active_session.id, sqlite_id, sequence_number=seq)
+            logger.debug(f"Added to existing session: {active_session.id}")
+            return active_session.id
+        
+        # >2 hours - check continuity with LLM
+        context = "\n".join([m["content"] for m in last_memories[-3:]])
+        
+        try:
+            continues = self.llm_provider.check_continuity(context, content, timeout=5.0)
+            
+            if continues:
+                # Same conversation - extend session
+                seq = active_session.memory_count + 1
+                self.session_store.add_memory_to_session(active_session.id, sqlite_id, sequence_number=seq)
+                logger.info(f"Extended session after {time_gap}: {active_session.id}")
+                return active_session.id
+            else:
+                # New topic - finalize old, create new
+                summary = self.llm_provider.generate_summary(
+                    [m["content"] for m in self.session_store.get_session_memories(active_session.id)],
+                    topic=active_session.topic
+                )
+                self.session_store.finalize_session(active_session.id, summary)
+                
+                new_session = self.session_store.create_session()
+                self.session_store.add_memory_to_session(new_session.id, sqlite_id, sequence_number=1)
+                logger.info(f"Finalized {active_session.id}, created new: {new_session.id}")
+                return new_session.id
+                
+        except Exception as e:
+            logger.error(f"LLM check failed: {e}, creating new session")
+            # Fallback: finalize old, create new
+            self.session_store.finalize_session(active_session.id, summary="Session ended")
+            new_session = self.session_store.create_session()
+            self.session_store.add_memory_to_session(new_session.id, sqlite_id, sequence_number=1)
+            return new_session.id
     
     def semantic_search(
         self,
@@ -835,7 +925,140 @@ class MemorySystem:
                 "keyword": self.KEYWORD_WEIGHT
             }
         }
-    
+
+    def get_sessions(self, limit: int = 10) -> list[dict]:
+        """
+        Get recent conversation sessions with metadata.
+        
+        Args:
+            limit: Maximum number of sessions to return
+            
+        Returns:
+            List of session dictionaries with:
+            - id: Session UUID
+            - start_time: ISO timestamp of first memory
+            - end_time: ISO timestamp of last memory
+            - memory_count: Number of memories in session
+            - summary: LLM-generated summary (or None)
+        """
+        import sqlite3
+        
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        try:
+            query = """
+            SELECT 
+                s.id,
+                s.start_time,
+                s.end_time,
+                s.summary,
+                COUNT(sm.memory_id) as memory_count
+            FROM sessions s
+            LEFT JOIN session_memories sm ON sm.session_id = s.id
+            GROUP BY s.id
+            ORDER BY s.end_time DESC
+            LIMIT ?
+            """
+            
+            cursor.execute(query, (limit,))
+            rows = cursor.fetchall()
+            
+            sessions = []
+            for row in rows:
+                sessions.append({
+                    'id': row['id'],
+                    'start_time': row['start_time'],
+                    'end_time': row['end_time'],
+                    'summary': row['summary'],
+                    'memory_count': row['memory_count']
+                })
+            
+            return sessions
+            
+        finally:
+            conn.close()
+
+
+    def get_session_details(self, session_id: str) -> dict | None:
+        """
+        Get detailed information about a specific session.
+        
+        Args:
+            session_id: Full or partial session UUID (will match prefix)
+            
+        Returns:
+            Dictionary with session details including memories, or None if not found
+        """
+        import sqlite3
+        import json
+        
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        try:
+            # Find session by ID prefix
+            cursor.execute("""
+                SELECT * FROM sessions 
+                WHERE id LIKE ? 
+                ORDER BY end_time DESC 
+                LIMIT 1
+            """, (f"{session_id}%",))
+            
+            session_row = cursor.fetchone()
+            if not session_row:
+                return None
+            
+            full_session_id = session_row['id']
+            
+            # Get memory IDs from session_memories join table
+            cursor.execute("""
+                SELECT memory_id, sequence_number
+                FROM session_memories 
+                WHERE session_id = ?
+                ORDER BY sequence_number ASC
+            """, (full_session_id,))
+            
+            memory_rows = cursor.fetchall()
+            
+            # Load actual memory data using self.get() method
+            memories = []
+            if memory_rows:
+                for row in memory_rows:
+                    mem_id = str(row['memory_id'])
+                    # Use the existing get() method to fetch the memory
+                    mem = self.get(mem_id)
+                    if mem:
+                        memories.append({
+                            'id': mem.id,
+                            'content': mem.content,
+                            'timestamp': mem.timestamp
+                        })
+            
+            # Parse metadata for entity highlights if available
+            entity_highlights = None
+            if session_row['metadata']:
+                try:
+                    metadata = json.loads(session_row['metadata'])
+                    entity_highlights = metadata.get('entity_highlights')
+                except (json.JSONDecodeError, TypeError):
+                    entity_highlights = None
+            
+            return {
+                'id': session_row['id'],
+                'start_time': session_row['start_time'],
+                'end_time': session_row['end_time'],
+                'summary': session_row['summary'],
+                'entity_highlights': entity_highlights,
+                'memory_count': len(memories),
+                'memories': memories
+            }
+            
+        finally:
+            conn.close()
+
     def reset(self) -> None:
         """Reset the entire memory system (all storages)."""
         self.memories = {}
@@ -855,3 +1078,4 @@ class MemorySystem:
             logger.error(f"Error resetting SQLite: {e}")
         
         logger.info("Memory system reset successfully (all storages cleared)")
+    

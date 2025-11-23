@@ -285,6 +285,9 @@ def reset():
 from mnemonic.cli_entities import entities_group
 cli.add_command(entities_group, name='entities')
 
+from mnemonic.cli_sessions import sessions_group
+cli.add_command(sessions_group, name='sessions')
+
 try:
     from mnemonic.cli_graph import graph
     cli.add_command(graph, name='graph')

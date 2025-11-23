@@ -3,6 +3,10 @@ Mnemonic configuration
 """
 from pathlib import Path
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Project root - can be overridden with environment variable
 PROJECT_ROOT = Path(os.environ.get('MNEMONIC_ROOT', Path.home() / 'Mnemonic'))

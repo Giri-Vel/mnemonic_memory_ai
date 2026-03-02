@@ -345,18 +345,125 @@ class EntityTypeManager:
     
     def add_entity_type(self, type_name: str) -> bool:
         """Add a new user-defined entity type"""
-        # [Keep existing implementation]
-        pass
-    
+        type_name = type_name.strip().lower()
+
+        if type_name in self.CORE_TYPES:
+            return False
+
+        if self._is_user_defined_type(type_name):
+            return False
+
+        conn = self._get_connection()
+        try:
+            conn.execute(
+                "INSERT INTO user_entity_types (type_name) VALUES (?)",
+                (type_name,)
+            )
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+        finally:
+            conn.close()
+
     def remove_entity_type(self, type_name: str, force: bool = False) -> Tuple[bool, Optional[str]]:
         """Remove a user-defined entity type"""
-        # [Keep existing implementation]
-        pass
-    
+        type_name = type_name.strip().lower()
+
+        if type_name in self.CORE_TYPES:
+            return False, f"'{type_name}' is a core type and cannot be removed"
+
+        if not self._is_user_defined_type(type_name):
+            return False, f"'{type_name}' is not a user-defined entity type"
+
+        conn = self._get_connection()
+        try:
+            if not force:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT COUNT(*) FROM entities WHERE LOWER(type) = LOWER(?)",
+                    (type_name,)
+                )
+                entity_count = cursor.fetchone()[0]
+                if entity_count > 0:
+                    return False, (
+                        f"'{type_name}' has {entity_count} associated entities. "
+                        "Use force=True to remove anyway."
+                    )
+
+            conn.execute(
+                "DELETE FROM user_entity_types WHERE LOWER(type_name) = LOWER(?)",
+                (type_name,)
+            )
+            conn.commit()
+            return True, None
+        finally:
+            conn.close()
+
     def list_entity_types(self) -> Dict[str, List[EntityTypeStats]]:
         """List all entity types (core + user-defined) with statistics"""
-        # [Keep existing implementation]
-        pass
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        result: Dict[str, List[EntityTypeStats]] = {'core': [], 'user_defined': []}
+
+        for type_name in sorted(self.CORE_TYPES):
+            cursor.execute("""
+                SELECT COUNT(*) as entity_count, COUNT(DISTINCT memory_id) as memory_count
+                FROM entities WHERE LOWER(type) = LOWER(?)
+            """, (type_name,))
+            row = cursor.fetchone()
+
+            cursor.execute("""
+                SELECT DISTINCT text FROM entities
+                WHERE LOWER(type) = LOWER(?)
+                ORDER BY frequency DESC LIMIT 3
+            """, (type_name,))
+            examples = [r[0] for r in cursor.fetchall()]
+
+            result['core'].append(EntityTypeStats(
+                type_name=type_name,
+                entity_count=row['entity_count'],
+                memory_count=row['memory_count'],
+                examples=examples,
+                added_at='built-in',
+            ))
+
+        cursor.execute("""
+            SELECT type_name, added_at, example_entities
+            FROM user_entity_types ORDER BY added_at DESC
+        """)
+        for ut in cursor.fetchall():
+            tn = ut['type_name']
+
+            cursor.execute("""
+                SELECT COUNT(*) as entity_count, COUNT(DISTINCT memory_id) as memory_count
+                FROM entities WHERE LOWER(type) = LOWER(?)
+            """, (tn,))
+            row = cursor.fetchone()
+
+            cursor.execute("""
+                SELECT DISTINCT text FROM entities
+                WHERE LOWER(type) = LOWER(?)
+                ORDER BY frequency DESC LIMIT 3
+            """, (tn,))
+            examples = [r[0] for r in cursor.fetchall()]
+
+            if not examples and ut['example_entities']:
+                try:
+                    examples = json.loads(ut['example_entities'])
+                except (json.JSONDecodeError, TypeError):
+                    examples = []
+
+            result['user_defined'].append(EntityTypeStats(
+                type_name=tn,
+                entity_count=row['entity_count'],
+                memory_count=row['memory_count'],
+                examples=examples,
+                added_at=ut['added_at'],
+            ))
+
+        conn.close()
+        return result
 
 
 def main():

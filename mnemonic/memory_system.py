@@ -97,9 +97,10 @@ class MemorySystem:
         """
         self.json_path = Path(json_path)
         self.json_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Initialize vector store
-        self.vector_store = VectorStore(persist_directory=vector_path)
+
+        # Vector store is lazy — loaded on first access via the property
+        self._vector_path = vector_path
+        self._vector_store = None
         
         # SQLite database path (from config)
         self.db_path = DB_PATH
@@ -131,6 +132,13 @@ class MemorySystem:
         
         self.session_time_gap = timedelta(hours=2)
     
+    @property
+    def vector_store(self) -> VectorStore:
+        """Lazy-initialise VectorStore on first access."""
+        if self._vector_store is None:
+            self._vector_store = VectorStore(persist_directory=self._vector_path)
+        return self._vector_store
+
     def _load_memories(self) -> None:
         """Load memories from JSON storage."""
         if self.json_path.exists():

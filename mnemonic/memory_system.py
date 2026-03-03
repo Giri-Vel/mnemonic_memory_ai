@@ -18,9 +18,6 @@ import logging
 import os
 
 from mnemonic.config import DB_PATH
-from mnemonic.entity_extractor import EntityExtractor
-from mnemonic.entity_storage import EntityStorage
-from mnemonic.checkpointing import CheckpointManager
 from mnemonic.sessions import SessionStore
 from mnemonic.llm_providers import get_provider, DummyProvider
 
@@ -108,16 +105,11 @@ class MemorySystem:
         self.memories: Dict[str, Memory] = {}
         self._load_memories()
 
-        try:
-            self.entity_extractor = EntityExtractor(self.db_path)
-            self.entity_storage = EntityStorage(self.db_path)
-            self.checkpoint_manager = CheckpointManager(self.db_path)
-            logger.info("Entity extraction system initialized")
-        except Exception as e:
-            logger.warning(f"Entity extraction not available: {e}")
-            self.entity_extractor = None
-            self.entity_storage = None
-            self.checkpoint_manager = None
+        # Entity system is lazy — loaded on first add() via properties
+        self._entity_extractor = None
+        self._entity_storage = None
+        self._checkpoint_manager = None
+        self._entity_system_loaded = False
 
         # Session management
         self.session_store = SessionStore(self.db_path)
@@ -138,6 +130,37 @@ class MemorySystem:
             from mnemonic.vector_store import VectorStore
             self._vector_store = VectorStore(persist_directory=self._vector_path)
         return self._vector_store
+
+    def _load_entity_system(self):
+        """Load EntityExtractor, EntityStorage, and CheckpointManager together on first use."""
+        if self._entity_system_loaded:
+            return
+        self._entity_system_loaded = True
+        try:
+            from mnemonic.entity_extractor import EntityExtractor
+            from mnemonic.entity_storage import EntityStorage
+            from mnemonic.checkpointing import CheckpointManager
+            self._entity_extractor = EntityExtractor(self.db_path)
+            self._entity_storage = EntityStorage(self.db_path)
+            self._checkpoint_manager = CheckpointManager(self.db_path)
+            logger.info("Entity extraction system initialized")
+        except Exception as e:
+            logger.warning(f"Entity extraction not available: {e}")
+
+    @property
+    def entity_extractor(self):
+        self._load_entity_system()
+        return self._entity_extractor
+
+    @property
+    def entity_storage(self):
+        self._load_entity_system()
+        return self._entity_storage
+
+    @property
+    def checkpoint_manager(self):
+        self._load_entity_system()
+        return self._checkpoint_manager
 
     def _load_memories(self) -> None:
         """Load memories from JSON storage."""

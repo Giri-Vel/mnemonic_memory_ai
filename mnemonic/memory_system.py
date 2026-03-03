@@ -473,7 +473,15 @@ class MemorySystem:
             self.session_store.add_memory_to_session(active_session.id, sqlite_id, sequence_number=seq)
             logger.debug(f"Added to existing session: {active_session.id}")
             return active_session.id
-        
+
+        # >24 hours - force-finalize, skip LLM check entirely
+        if time_gap >= timedelta(hours=24):
+            self.session_store.finalize_session(active_session.id, summary="Session auto-closed (stale)")
+            new_session = self.session_store.create_session()
+            self.session_store.add_memory_to_session(new_session.id, sqlite_id, sequence_number=1)
+            logger.info(f"Force-finalized stale session {active_session.id} (gap: {time_gap})")
+            return new_session.id
+
         # >2 hours - check continuity with LLM
         context = "\n".join([m["content"] for m in last_memories[-3:]])
         

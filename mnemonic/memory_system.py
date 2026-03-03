@@ -17,7 +17,6 @@ from datetime import datetime, timedelta
 import logging
 import os
 
-from mnemonic.vector_store import VectorStore
 from mnemonic.config import DB_PATH
 from mnemonic.entity_extractor import EntityExtractor
 from mnemonic.entity_storage import EntityStorage
@@ -133,9 +132,10 @@ class MemorySystem:
         self.session_time_gap = timedelta(hours=2)
     
     @property
-    def vector_store(self) -> VectorStore:
+    def vector_store(self):
         """Lazy-initialise VectorStore on first access."""
         if self._vector_store is None:
+            from mnemonic.vector_store import VectorStore
             self._vector_store = VectorStore(persist_directory=self._vector_path)
         return self._vector_store
 

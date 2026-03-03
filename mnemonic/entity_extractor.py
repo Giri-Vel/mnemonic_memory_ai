@@ -81,11 +81,18 @@ class EntityExtractor:
         self._load_user_labels()
     
     def _init_gliner(self):
-        """Initialize GLiNER model"""
+        """Initialise GLiNER state — model loads lazily on first use."""
+        self.gliner_model = None
+        self._gliner_loaded = False
+
+    def _ensure_gliner_loaded(self):
+        """Load GLiNER the first time it is needed."""
+        if self._gliner_loaded:
+            return
+        self._gliner_loaded = True  # set before attempt so we don't retry on failure
         if not GLINER_AVAILABLE:
             print("⚠ GLiNER not available - core entity extraction disabled")
             return
-        
         try:
             print("Loading GLiNER model...")
             self.gliner_model = GLiNER.from_pretrained("urchade/gliner_small-v2.1")
@@ -93,13 +100,20 @@ class EntityExtractor:
         except Exception as e:
             print(f"✗ Failed to load GLiNER: {e}")
             self.gliner_model = None
-    
+
     def _init_spacy(self):
-        """Initialize spaCy model"""
+        """Initialise spaCy state — model loads lazily on first use."""
+        self.nlp = None
+        self._spacy_loaded = False
+
+    def _ensure_spacy_loaded(self):
+        """Load spaCy the first time it is needed."""
+        if self._spacy_loaded:
+            return
+        self._spacy_loaded = True  # set before attempt so we don't retry on failure
         if not SPACY_AVAILABLE:
             print("⚠ spaCy not available - noun phrase extraction disabled")
             return
-        
         try:
             print("Loading spaCy model...")
             self.nlp = spacy.load("en_core_web_sm")
@@ -145,14 +159,12 @@ class EntityExtractor:
         entities = []
         
         # 1. Core + user-defined entities via GLiNER
-        if self.gliner_model:
-            gliner_entities = self._extract_with_gliner(text)
-            entities.extend(gliner_entities)
-        
+        gliner_entities = self._extract_with_gliner(text)
+        entities.extend(gliner_entities)
+
         # 2. Noun phrases (untyped entities)
-        if self.nlp:
-            noun_phrase_entities = self._extract_noun_phrases(text, entities)
-            entities.extend(noun_phrase_entities)
+        noun_phrase_entities = self._extract_noun_phrases(text, entities)
+        entities.extend(noun_phrase_entities)
         
         # 3. Tag-derived entities (user-provided)
         tag_entities = self._tags_to_entities(user_tags)
@@ -178,9 +190,10 @@ class EntityExtractor:
         Returns:
             List of Entity objects with types from core + user labels
         """
+        self._ensure_gliner_loaded()
         if not self.gliner_model:
             return []
-        
+
         # Combine core and user-defined labels
         all_labels = CORE_LABELS + self.user_labels
         
@@ -220,9 +233,10 @@ class EntityExtractor:
         Returns:
             List of Entity objects (untyped)
         """
+        self._ensure_spacy_loaded()
         if not self.nlp:
             return []
-        
+
         # Build set of existing entity texts for fast lookup
         existing_texts = {e.text.lower() for e in existing_entities}
         
